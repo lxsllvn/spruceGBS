@@ -1,11 +1,10 @@
 ## Overview
 
+---
 ## Contents
 
-* **`<script1>.sh`**: Short description of what this script does.
-* **`<script2>.R`**: Short description of what this analysis or step does.
-* **`...`**
-
+* **`read_qc.sh`**: Short description of what this script does.
+* **`bwa.sh**: Short description of what this analysis or step does.
 ---
 
 ## Pre-processing and quality control
@@ -16,7 +15,7 @@ Most libraries were sequenced on the HiSeq 2500, but two (*ca*. 600 samples) wer
 
 To help mitigate the potential effects of the differing platforms, I trimmed poly-X tails (`-x`), low entropy sequences (``-y``) and more aggressively filtered low-quality bases using the `--cut_front` and `--cut_right` options in fastp, which trim trailing and leading bases if the mean quality in a 4 bp window drops below 20. I analyzed overrepresented k-mers (`-p`) and visually assessed the reduction in poly-X, in addition to sanity-checking the filtered HiSeq *vs*. Novoseq reads.
 
-## **read_qc.sh** use example
+## **read_qc.sh** usage
 
 ``` bash
 #!/bin/bash
@@ -29,14 +28,13 @@ done < sample.list
 
 We used **bwa.sh** to map paired-end reads to the *P. abies* reference genome with BWA-MEM v. 0.7.18. This script also calculates depth per position and per individual, for base qualities \>= 20 and mapping qualities \>= 30.
 
----
-```
+## **bwa.sh** usage
+```bash
 #!/bin/bash
 while IFS= read -r sample; do
     sbatch "$SCRIPTS/bwa.sh" "$sample"
 done < sample.list
 ```
----
 
 ## Inputs & Outputs
 
@@ -48,21 +46,14 @@ done < sample.list
 
   * `\<path/to/output1\>`: Description of the generated output.
   * `\<path/to/output2\>`: ...
-
 ---
 
 ## Dependencies
-
-List required modules, software, or packages:
-
-* Bash (with `set -euo pipefail` recommended)
-* [samtools](https://www.htslib.org/) >= 1.9
-* R (packages: tidyverse, data.table, ...)
-* ...
+* [stacks](https://catchenlab.life.illinois.edu/stacks/) v. 2.0
+* [fastp](https://github.com/OpenGene/fastp) v. 0.23.4
+* [bwa](https://github.com/lh3/bwa) v. 0.7.18
+* [samtools](https://www.htslib.org/) v. 1.19.2
 
 ---
-
-## Notes & Gotchas
-
 
 
