@@ -21,8 +21,10 @@ READS="${SPRUCE_PROJECT}/reads/qcd"
 
 # Set output directory
 OUTDIR="${SPRUCE_PROJECT}/bams/full_alignments"
+# Subdirectory for read depth files
+READDEPTH_DIR="${OUTDIR}/read_depths"
 # Create output directory if it doesn't exist
-mkdir -p "$OUTDIR"
+mkdir -p "$OUTDIR" "$READDEPTH_DIR"
 
 # Load required modules
 ml GCC/13.2.0
@@ -32,15 +34,17 @@ ml SAMtools/1.19.2
 echo "Starting $SAMPLE at $(date)"
 
 # Align reads and sort the output BAM
-bwa mem -R "@RG\tID:${SAMPLE}\tSM:${SAMPLE}\tPL:ILLUMINA" "$REF" \
-  "${READS}/fastp_${SAMPLE}_1.fq.gz" "${READS}/fastp_${SAMPLE}_2.fq.gz" | \
-  samtools sort -o "${OUTDIR}/${SAMPLE}.bam"
-
+bwa mem -R "@RG\tID:${SAMPLE}\tSM:${SAMPLE}\tPL:ILLUMINA" \
+    "$REF" \
+    "${READS}/fastp_${SAMPLE}_1.fq.gz" \
+    "${READS}/fastp_${SAMPLE}_2.fq.gz" \
+  | samtools sort -o "${OUTDIR}/${SAMPLE}.bam"
+  
 # Index the BAM 
 samtools index "${OUTDIR}/${SAMPLE}.bam"
 
 # Calculate read depth
 echo "Calculating depth for $SAMPLE at $(date)"
-samtools depth -q 20 -Q 30 -J -o "${OUTDIR}/${SAMPLE}.depth" "${OUTDIR}/${SAMPLE}.bam"
+samtools depth -q 20 -Q 30 -J -o "${READDEPTH_DIR}/${SAMPLE}.depth" "${OUTDIR}/${SAMPLE}.bam"
 
 echo "Finished $SAMPLE at $(date)"
