@@ -50,7 +50,7 @@ done < sample.list
   * `${SPRUCE_PROJECT}/reads`: de-multiplexed reads
     
 * **Outputs**:
-  * `${SPRUCE_PROJECT}/reads/qc>`: quality-controlled reads
+  * `${SPRUCE_PROJECT}/reads/qc`: quality-controlled reads
   * `${SPRUCE_PROJECT}/bams/full_alignments`: sorted and indexed BAMs
   * `${SPRUCE_PROJECT}/bams/full_alignments/read_depths`: read depths per sample
 ---
