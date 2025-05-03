@@ -23,10 +23,9 @@ while IFS= read -r sample; do
     sbatch "$SCRIPTS/read_qc.sh" "$sample"
 done < sample.list
 ```
-
+---
 ## Alignment
-
-We used **bwa.sh** to map paired-end reads to the *P. abies* reference genome with BWA-MEM v. 0.7.18. This script also calculates depth per position and per individual, for base qualities \>= 20 and mapping qualities \>= 30.
+We used mapped surviving paired-end reads to the *P. abies* reference genome with BWA-MEM v. 0.7.19, as implemented in **bwa.sh**. This script produces sorted, indexed BAMs. This script also calculates per-sample read depths, which are used to identify scaffolds to keep in the [reduced reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
 
 ## **bwa.sh** usage
 ```bash
@@ -35,17 +34,17 @@ while IFS= read -r sample; do
     sbatch "$SCRIPTS/bwa.sh" "$sample"
 done < sample.list
 ```
-
+---
 ## Inputs & Outputs
 
 * **Inputs**:
-
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
+  * `\<${SPRUCE_PROJECT}/ref/Pabies1.0-genome.fa\>`: reference genome and BWA index files
+  * `\<${SPRUCE_PROJECT}/reads>`: de-multiplexed reads
+    
 * **Outputs**:
-
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
+  * `\<${SPRUCE_PROJECT}/reads/qc\>`: quality-controlled reads
+  * `\<${SPRUCE_PROJECT}/bams/full_alignments\>`: sorted and indexed BAMs
+  * `\<${SPRUCE_PROJECT}/bams/full_alignments/read_depths\>`: read depths per sample
 ---
 
 ## Dependencies
