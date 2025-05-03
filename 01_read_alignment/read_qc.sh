@@ -1,11 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J bwa
-#SBATCH -n 1
-#SBATCH -c 1
-#SBATCH --constraint=skylake
-#SBATCH -t 0-10:00:00
-
 set -euo pipefail
 IFS=$'\n\t'
 

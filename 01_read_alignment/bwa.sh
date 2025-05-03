@@ -1,10 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J bwa
-#SBATCH -n 1
-#SBATCH -c 3
-#SBATCH --constraint=skylake
-#SBATCH -t 0-10:00:00
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -31,7 +25,8 @@ OUTDIR="${SPRUCE_PROJECT}/bams/full_alignments"
 mkdir -p "$OUTDIR"
 
 # Load required modules
-ml BWA/0.7.17
+ml GCC/13.2.0
+ml BWA/0.7.18
 ml SAMtools/1.19.2
 
 echo "Starting $SAMPLE at $(date)"

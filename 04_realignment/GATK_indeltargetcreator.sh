@@ -1,10 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J indel_target
-#SBATCH --constraint=skylake|zen3
-#SBATCH -n 1
-#SBATCH -c 1
-#SBATCH -t 1-00:00:00
 
 set -euo pipefail
 IFS=$'\n\t'

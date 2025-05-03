@@ -1,13 +1,6 @@
 #!/usr/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -n 1
-#SBATCH -c 1
-#SBATCH -J refprep
-#SBATCH --constraint=skylake
-#SBATCH -t 0-06:00:00
 
 set -euo pipefail
-IFS=$'\n\t'
 
 # ------------------------
 # SCRIPT ARGUMENTS

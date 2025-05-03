@@ -1,11 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J seq_dict
-#SBATCH --output=seq_dict.out
-#SBATCH --error=seq_dict.err
-#SBATCH -n 1
-#SBATCH -c 6
-#SBATCH -t 1-00:00:00
 
 # Load required modules
 ml Java/17.0.6

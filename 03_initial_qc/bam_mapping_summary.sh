@@ -1,11 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J mapping_summary
-#SBATCH --output=mapping_summary.out
-#SBATCH --error=mapping_summary.err
-#SBATCH -n 1
-#SBATCH -c 1
-#SBATCH -t 0-02:00:00
 
 set -euo pipefail
 IFS=$'\n\t'

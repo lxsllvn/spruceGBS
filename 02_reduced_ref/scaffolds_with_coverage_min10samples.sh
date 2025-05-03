@@ -1,11 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J scaff_cov
-#SBATCH --output=scaff_cov.out
-#SBATCH --error=scaff_cov.err
-#SBATCH -n 1
-#SBATCH -c 1
-#SBATCH -t 0-10:00:00
 
 # Returns a list of scaffolds with >= 5 mapped reads in at least 100 samples.
 

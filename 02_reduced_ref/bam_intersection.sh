@@ -1,9 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J intersect
-#SBATCH -n 1
-#SBATCH -c 6
-#SBATCH -t 0-02:00:00
 
 set -euo pipefail
 IFS=$'\n\t'

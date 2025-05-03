@@ -54,3 +54,5 @@ jobs/
 # SLURM job logs
 logs/
 
+# Template README
+README_template.md

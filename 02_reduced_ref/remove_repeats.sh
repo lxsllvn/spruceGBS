@@ -1,11 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J remove_repeats
-#SBATCH --output=remove_repeats.out
-#SBATCH --error=remove_repeats.err
-#SBATCH -n 1
-#SBATCH -c 1
-#SBATCH -t 1-00:00:00
 
 set -euo pipefail
 IFS=$'\n\t'

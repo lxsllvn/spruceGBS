@@ -1,10 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -n 1
-#SBATCH -c 4
-#SBATCH -J discovery
-#SBATCH --constraint=skylake
-#SBATCH -t 0-06:00:00
 
 # Load modules
 ml GCC/10.2.0

@@ -1,11 +1,4 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J ref_prep
-#SBATCH --output=ref_prep.out
-#SBATCH --error=ref_prep.err
-#SBATCH -n 1
-#SBATCH -c 6
-#SBATCH -t 1-00:00:00
 
 # Creates a new reference comprising only scaffolds with mapped reads;
 # this step makes downstream analyses much smoother

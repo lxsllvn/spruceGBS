@@ -1,15 +1,7 @@
 #!/bin/bash
-#SBATCH -A hpc2n2024-161
-#SBATCH -J param_sweep
-#SBATCH --output=param_sweep.out
-#SBATCH --error=param_sweep.err
-#SBATCH --constraint=skylake
-#SBATCH -n 1
-#SBATCH -c 4
-#SBATCH -t 0-12:00:00
 
 # This script implements a parameter sweep pipeline for testing ANGSD settings
-# across a ~10 Mbp filtered region using experimental samples.
+# across a ~100 Mbp filtered region using experimental samples.
 
 # ------------------------
 # REQUIRED INPUTS
