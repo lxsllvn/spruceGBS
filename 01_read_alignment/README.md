@@ -16,18 +16,26 @@ Most libraries were sequenced on the HiSeq 2500, but two (*ca*. 600 samples) wer
 
 To help mitigate the potential effects of the differing platforms, I trimmed poly-X tails (`-x`), low entropy sequences (``-y``) and more aggressively filtered low-quality bases using the `--cut_front` and `--cut_right` options in fastp, which trim trailing and leading bases if the mean quality in a 4 bp window drops below 20. I analyzed overrepresented k-mers (`-p`) and visually assessed the reduction in poly-X, in addition to sanity-checking the filtered HiSeq *vs*. Novoseq reads.
 
----
+## **read_qc.sh** use example
 
-
-## Usage
-
-Provide example commands demonstrating a typical invocation:
-
-```bash
-bash <script1>.sh arg1 arg2
-Rscript <script2>.R input_file output_file
+``` bash
+#!/bin/bash
+while IFS= read -r sample; do
+    sbatch "$SCRIPTS/read_qc.sh" "$sample"
+done < sample.list
 ```
 
+## Alignment
+
+We used **bwa.sh** to map paired-end reads to the *P. abies* reference genome with BWA-MEM v. 0.7.18. This script also calculates depth per position and per individual, for base qualities \>= 20 and mapping qualities \>= 30.
+
+---
+```
+#!/bin/bash
+while IFS= read -r sample; do
+    sbatch "$SCRIPTS/bwa.sh" "$sample"
+done < sample.list
+```
 ---
 
 ## Inputs & Outputs
