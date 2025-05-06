@@ -51,8 +51,12 @@ bash <script1>.sh arg1 arg2
 ## BAM intersections
 
 ## **`bam_intersection.sh` useage**
+
 ```bash
-bash <script1>.sh arg1 arg2
+#!/bin/bash
+while IFS= read -r sample; do
+    sbatch "$SCRIPTS/bam_intersection.sh" "$sample"
+done < sample.list
 ```
 ---
 
