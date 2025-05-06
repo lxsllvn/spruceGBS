@@ -14,20 +14,26 @@ Briefly describe the purpose of this directory (one or two sentences).
 ---
 
 ## Scaffold search
-Why? Because the P. abies reference genome is 12.4 Gb and has 10,253,694 scaffolds. Downstream analysis are either extremely slow or can't run at all (ANGSD, GATK).
+Why? Because the P. abies reference genome is 12.4 Gb and has 10,253,694 scaffolds.  Downstream analysis are either extremely slow or can't run at all (ANGSD, GATK).
 
 Find scaffolds with with \>= 5 mapped reads in any sample **scaffolds_with_coverage.sh**. I tested requiring 100 samples, but the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
 
 ## **`scaffolds_with_coverage.sh` useage**
 
 ```bash
-bash <script1>.sh arg1 arg2
+sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_file]
 ```
-
+* `<depth_dir>` (required): directory holding your *.depth files
+* `[scratch_dir]` (optional): temp dir for sorting (default: ${SPRUCE_PROJECT}/scaff_cov_tmp_$$)
+* `[output_file]` (optional): desired output name (default: ${SPRUCE_PROJECT}/ref/scaffolds_with_coverage.txt)
 
 ---
 ## Reduce reference preperation
+We created a reduced reference genome comprising only these scaffolds using **reduced_reference_prep.sh**.
 
+use samtools faidx to extract these scaffolds
+parse fasta index to bed file
+make sequence dictionary for later 
 
 ## **`reduced_reference_prep.sh` useage**
 ```bash
@@ -41,6 +47,8 @@ bash <script1>.sh arg1 arg2
 ---
 
 ## Identify target regions for analysis 
+scaffolds in the reduced ref, minus annotated repeats (+/- 500 bp) and short intervening regions (< 1000 bp)
+
 
 ## **`remove_repeats.sh` useage**
 ```bash
@@ -49,6 +57,7 @@ bash <script1>.sh arg1 arg2
 
 ---
 ## BAM intersections
+intersect bams with target regions
 
 ## **`bam_intersection.sh` useage**
 
