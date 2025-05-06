@@ -6,10 +6,38 @@ Briefly describe the purpose of this directory (one or two sentences).
 
 ## Contents
 
-* **`<script1>.sh`**: Short description of what this script does.
-* **`<script2>.R`**: Short description of what this analysis or step does.
-* **`...`**
+* **`scaffolds_with_coverage.sh`**: Short description of what this script does.
+* **`remove_repeats.sh`**: Short description of what this analysis or step does.
+* **`reduced_reference_prep.sh`**:
+* **`picard_dictionary.sh`**:
+* **`bam_intersection`**:
+---
 
+## Scaffold search
+Why? Because the P. abies reference genome is 12.4 Gb and has 10,253,694 scaffolds. Downstream analysis are either extremely slow or can't run at all (ANGSD, GATK).
+
+Find scaffolds with with \>= 5 mapped reads in any sample **scaffolds_with_coverage.sh**. I tested requiring 100 samples, but the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
+
+## **`[scaffolds_with_coverage.sh](https://github.com/lxsllvn/spruceGBS/blob/main/02_reduced_ref/scaffolds_with_coverage.sh)` useage**
+
+---
+## Reduce reference preperation
+
+
+## **`reduced_reference_prep.sh` useage**
+## **`picard_dictionary.sh` useage**
+
+
+---
+
+## Identify target regions for analysis 
+
+## **`remove_repeats.sh` useage**
+
+---
+## BAM intersections
+
+## **`bam_intersection.sh` useage**
 ---
 
 ## Usage
@@ -43,7 +71,7 @@ Rscript <script2>.R input_file output_file
 
 List required modules, software, or packages:
 
-* [samtools](https://www.htslib.org/) >= 1.9
+* [samtools](https://www.htslib.org/) v. 1.19.2
 * [bedtools](https://github.com/arq5x/bedtools2) v. 2.31.0
 * [picard](https://github.com/broadinstitute/picard) v. 3.3.0
 * Java v. 17.0.6
