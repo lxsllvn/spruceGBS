@@ -20,36 +20,42 @@ Find scaffolds with with \>= 5 mapped reads in any sample **scaffolds_with_cover
 
 ## **`scaffolds_with_coverage.sh` useage**
 
+```bash
+bash <script1>.sh arg1 arg2
+```
+
+
 ---
 ## Reduce reference preperation
 
 
 ## **`reduced_reference_prep.sh` useage**
+```bash
+bash <script1>.sh arg1 arg2
+```
 ## **`picard_dictionary.sh` useage**
-
+```bash
+bash <script1>.sh arg1 arg2
+```
 
 ---
 
 ## Identify target regions for analysis 
 
 ## **`remove_repeats.sh` useage**
+```bash
+bash <script1>.sh arg1 arg2
+```
 
 ---
 ## BAM intersections
 
 ## **`bam_intersection.sh` useage**
----
-
-## Usage
-
-Provide example commands demonstrating a typical invocation:
-
 ```bash
 bash <script1>.sh arg1 arg2
-Rscript <script2>.R input_file output_file
 ```
-
 ---
+
 
 ## Inputs & Outputs
 
