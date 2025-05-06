@@ -27,12 +27,15 @@ Rscript <script2>.R input_file output_file
 
 * **Inputs**:
 
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
+  * `${SPRUCE_PROJECT}/bams/full_alignments/read_depths`: Description of the expected input file or directory.
+  * `${SPRUCE_PROJECT}/ref/Pabies1.0-genome.fa`:
+  * `${SPRUCE_PROJECT}/ref/spruce_repeats.bed`:
+  * 
 * **Outputs**:
 
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
+  * `picea_newref`: Description of the generated output.
+  * `picea_newref_target_regions.bed`:
+  * `${SPRUCE_PROJECT}/bams/intersected`:
 
 ---
 
@@ -40,10 +43,11 @@ Rscript <script2>.R input_file output_file
 
 List required modules, software, or packages:
 
-* Bash (with `set -euo pipefail` recommended)
 * [samtools](https://www.htslib.org/) >= 1.9
-* R (packages: tidyverse, data.table, ...)
-* ...
+* [bedtools](https://github.com/arq5x/bedtools2) v. 2.31.0
+* [picard](https://github.com/broadinstitute/picard) v. 3.3.0
+* Java v. 17.0.6
+
 
 ---
 
