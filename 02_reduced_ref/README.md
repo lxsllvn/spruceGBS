@@ -18,7 +18,7 @@ Why? Because the P. abies reference genome is 12.4 Gb and has 10,253,694 scaffol
 
 Find scaffolds with with \>= 5 mapped reads in any sample **scaffolds_with_coverage.sh**. I tested requiring 100 samples, but the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
 
-## **`[scaffolds_with_coverage.sh](https://github.com/lxsllvn/spruceGBS/blob/main/02_reduced_ref/scaffolds_with_coverage.sh)` useage**
+## **`scaffolds_with_coverage.sh` useage**
 
 ---
 ## Reduce reference preperation
@@ -54,7 +54,6 @@ Rscript <script2>.R input_file output_file
 ## Inputs & Outputs
 
 **Inputs**:
-
   *`${SPRUCE_PROJECT}/bams/full_alignments/`: alignments to the full P.abies reference, created [here](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/).
   * `${SPRUCE_PROJECT}/bams/full_alignments/read_depths`: read depths per sample, created during [alignment](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/).
   * `${SPRUCE_PROJECT}/ref/Pabies1.0-genome.fa`: the [reference genome](https://plantgenie.org/FTP)
