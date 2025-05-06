@@ -24,8 +24,8 @@ Find scaffolds with with \>= 5 mapped reads in any sample **scaffolds_with_cover
 sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_file]
 ```
 * `<depth_dir>` (required): directory holding your *.depth files
-* `[scratch_dir]` (optional): temp dir for sorting (default: ${SPRUCE_PROJECT}/scaff_cov_tmp_$$)
-* `[output_file]` (optional): desired output name (default: ${SPRUCE_PROJECT}/ref/scaffolds_with_coverage.txt)
+* `[scratch_dir]` (optional): temp dir for sorting (default: `${SPRUCE_PROJECT}/scaff_cov_tmp_$$`)
+* `[output_file]` (optional): desired output name (default: `${SPRUCE_PROJECT}/ref/scaffolds_with_coverage.txt`)
 
 ---
 ## Reduce reference preperation
