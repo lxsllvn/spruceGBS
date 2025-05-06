@@ -7,10 +7,10 @@ Briefly describe the purpose of this directory (one or two sentences).
 ## Contents
 
 * **`scaffolds_with_coverage.sh`**: Short description of what this script does.
-* **`remove_repeats.sh`**: Short description of what this analysis or step does.
 * **`reduced_reference_prep.sh`**:
 * **`picard_dictionary.sh`**:
-* **`bam_intersection`**:
+* **`find_targets.sh`**: Short description of what this analysis or step does.
+* **`bam_intersection.sh`**:
 ---
 
 ## Scaffold search
@@ -19,16 +19,16 @@ Why? Because the P. abies reference genome is 12.4 Gb and has 10,253,694 scaffol
 Find scaffolds with with \>= 5 mapped reads in any sample **scaffolds_with_coverage.sh**. I tested requiring 100 samples, but the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
 
 ## **`scaffolds_with_coverage.sh` useage**
-
 ```bash
+#!/bin/bash
 sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_file]
 ```
-* `<depth_dir>` (required): directory holding your *.depth files
+* `<depth_dir>`   (required): directory holding your *.depth files
 * `[scratch_dir]` (optional): temp dir for sorting (default: `${SPRUCE_PROJECT}/scaff_cov_tmp_$$`)
 * `[output_file]` (optional): desired output name (default: `${SPRUCE_PROJECT}/ref/scaffolds_with_coverage.txt`)
 
 ---
-## Reduce reference preperation
+## Reduced reference preperation
 We created a reduced reference genome comprising only these scaffolds using **reduced_reference_prep.sh**.
 
 use samtools faidx to extract these scaffolds
@@ -50,7 +50,7 @@ bash <script1>.sh arg1 arg2
 scaffolds in the reduced ref, minus annotated repeats (+/- 500 bp) and short intervening regions (< 1000 bp)
 
 
-## **`remove_repeats.sh` useage**
+## **`find_targets.sh` useage**
 ```bash
 bash <script1>.sh arg1 arg2
 ```
@@ -81,7 +81,7 @@ done < sample.list
   **Outputs**:
   * `${SPRUCE_PROJECT}/ref/picea_newref.fa`: reduced reference genome with fasta index (\*\.fai) and sequence dictionary (\*\.dict).
   * `${SPRUCE_PROJECT}/ref/picea_newref_target_regions.bed`: scaffolds with coverage, minus annotated repeats (+/- 500) bp and short (< 1,000 bp) intervening regions
-  * `${SPRUCE_PROJECT}/bams/intersected/`: alignments intersected by picea_newref_target_regions.bed
+  * `${SPRUCE_PROJECT}/bams/intersected/`: alignments intersected by `picea_newref_target_regions.bed`
 
 ---
 
