@@ -46,7 +46,7 @@ done < sample.list
 ## Inputs & Outputs
 
 * **Inputs**:
-  * `${SPRUCE_PROJECT}/ref/Pabies1.0-genome.fa`: reference genome and BWA index files
+  * `${SPRUCE_PROJECT}/ref/Pabies1.0-genome.fa`: the [reference genome](https://plantgenie.org/FTP) and BWA index files
   * `${SPRUCE_PROJECT}/reads`: de-multiplexed reads
     
 * **Outputs**:
