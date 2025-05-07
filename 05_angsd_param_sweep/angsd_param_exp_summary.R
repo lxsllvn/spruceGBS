@@ -123,6 +123,28 @@ main <- function(project_dir = ".", meta_file = "metadata.csv", bamlist_file = N
     count_file <- file.path(param_path, "domain_sfs.counts.gz")
     callable   <- get_all_callable_sites(count_file, meta_file, bamlist_file)
 
+      # write callable site lists per threshold
+    for (thresh in names(callable$all)) {
+      suffix <- sub("^0\\.(.*)$", "\\1", thresh)
+      # all callable sites
+      snps_all  <- callable$all[[thresh]]
+      # split at last underscore into scaffold,pos
+      # perl regex translation: an underscore (_) followed by ((?= … ))
+      # one or more characters that aren't underscores ([^_]+) then end of string ($)
+      parts_all <- tstrsplit(snps_all, split = "_(?=[^_]+$)", perl = TRUE)
+      df_all    <- data.table(scaffold = parts_all[[1]], pos = parts_all[[2]])
+      fwrite(df_all,
+             file.path(param_path, paste0("domain_sfs_sites_ct", suffix)),
+             sep = "	", col.names = FALSE)
+      # maf-filtered sites
+      snps_maf  <- callable$maf_filtered[[thresh]]
+      parts_maf <- tstrsplit(snps_maf, split = "_(?=[^_]+$)", perl = TRUE) 
+      df_maf    <- data.table(scaffold = parts_maf[[1]], pos = parts_maf[[2]])
+      fwrite(df_maf,
+             file.path(param_path, paste0("domain_sfs_maf_sites_ct", suffix)),
+             sep = "	", col.names = FALSE)
+    }
+    
     # subset beagle by maf‐filtered snpcodes per threshold
     beagle_in <- file.path(param_path, "domain_sfs.beagle.gz")
     beagle_dt <- fread(beagle_in, check.names = FALSE)
