@@ -3,54 +3,49 @@
 Briefly describe the purpose of this directory (one or two sentences).
 
 ---
-
 ## Contents
-
-* **`scaffolds_with_coverage.sh`**: Short description of what this script does.
-* **`reduced_reference_prep.sh`**:
-* **`picard_dictionary.sh`**:
-* **`find_targets.sh`**: Short description of what this analysis or step does.
-* **`bam_intersection.sh`**:
+* **`scaffolds_with_coverage.sh`**: find scaffolds with >=5 mapped reads in any sample
+* **`reduced_reference_prep.sh`**: create new reference with only scaffolds with mapped reads
+* **`picard_dictionary.sh`**: make sequence dictionary for GATK (used in [04_realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment))
+* **`find_targets.sh`**: find potential sites for downstream analyses; this removes regions near/within/book-ended by annotated repeats
+* **`bam_intersection.sh`**: intersect the alignments from [01_read_alignments](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment) with the output of **`find_targets.sh`**
 ---
 
 ## Scaffold search
-Why? Because the P. abies reference genome is 12.4 Gb and has 10,253,694 scaffolds.  Downstream analysis are either extremely slow or can't run at all (ANGSD, GATK).
+The P. abies reference genome is 12.4 Gb and has 10,253,694 scaffolds. This makes most downstream analyses extremely slow, have massive memory requirements, or just fail entirely (e.g. GATK, ANGSD). 
 
-Find scaffolds with with \>= 5 mapped reads in any sample **scaffolds_with_coverage.sh**. I tested requiring 100 samples, but the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
+Fortunately, most scaffolds have zero mapped reads in any sample. **`scaffolds_with_coverage.sh`** takes the per-sample read depths produced in [01_read_alignment](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment) and identifies scaffolds with \>= 5 mapped reads (with Q >= 20 and MQ >= 30) in any sample. A single sample is permissive, but I tested requiring 100 samples and the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
 
-## **`scaffolds_with_coverage.sh` useage**
+## **`scaffolds_with_coverage.sh` usage**
 ```bash
 #!/bin/bash
 sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_file]
 ```
-* `<depth_dir>`   (required): directory holding your *.depth files
+* `<depth_dir>`   (required): directory holding *.depth files
 * `[scratch_dir]` (optional): temp dir for sorting (default: `${SPRUCE_PROJECT}/scaff_cov_tmp_$$`)
 * `[output_file]` (optional): desired output name (default: `${SPRUCE_PROJECT}/ref/scaffolds_with_coverage.txt`)
 
 ---
-## Reduced reference preperation
-We created a reduced reference genome comprising only these scaffolds using **reduced_reference_prep.sh**.
+## Reduced reference preparation
+Next, we created a reduced reference comprising only the 218,545 scaffolds with mapped reads with **`reduced_reference_prep.sh`**. This script uses `samtools` to extract the scaffolds from the full reference and index the reduced reference, and creates a bed file from `picea_newref.fa.fai`. 
 
-use samtools faidx to extract these scaffolds
-parse fasta index to bed file
-make sequence dictionary for later 
+**`picard_dictionary.sh`** creates the sequence dictionary for the reduced reference that is needed by GATK for [indel realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment).
 
-## **`reduced_reference_prep.sh` useage**
+## **`reduced_reference_prep.sh` usage**
 ```bash
 bash <script1>.sh arg1 arg2
 ```
-## **`picard_dictionary.sh` useage**
+## **`picard_dictionary.sh` usage**
 ```bash
 bash <script1>.sh arg1 arg2
 ```
-
 ---
-
 ## Identify target regions for analysis 
-scaffolds in the reduced ref, minus annotated repeats (+/- 500 bp) and short intervening regions (< 1000 bp)
+The Picea nuclear genome is ca. 70% transposable elements. Many of these are collapsed in the aging P. abies reference assembly, but Illumina libraries seem unlikely to offer much repeat resolution anyway. In a previous experiment, I found that sites in annotated repeats have a consistent deficit of heterozygotes, regardless of the stringency of the genotype calls/likelihoods. Because these sites are unlikely to survive to the final set of genotype calls/likelihoods, I decided to remove them at this stage to reduce the computational demand of the indel realignment. 
 
+**`find_targets.sh`** takes a bed file of the annotated repeats, expands them by 500 bp on both sizes, subtracts these from `picea_newref.bed` and removes any short intervening regions (< 1000 bp) or scaffolds. This produces `picea_newref_target_regions.bed`, which are the initial set of sites for the subsequent steps. 
 
-## **`find_targets.sh` useage**
+## **`find_targets.sh` usage**
 ```bash
 bash <script1>.sh arg1 arg2
 ```
@@ -59,8 +54,7 @@ bash <script1>.sh arg1 arg2
 ## BAM intersections
 intersect bams with target regions
 
-## **`bam_intersection.sh` useage**
-
+## **`bam_intersection.sh` usage**
 ```bash
 #!/bin/bash
 while IFS= read -r sample; do
@@ -68,8 +62,6 @@ while IFS= read -r sample; do
 done < sample.list
 ```
 ---
-
-
 ## Inputs & Outputs
 
 **Inputs**:
@@ -82,23 +74,11 @@ done < sample.list
   * `${SPRUCE_PROJECT}/ref/picea_newref.fa`: reduced reference genome with fasta index (\*\.fai) and sequence dictionary (\*\.dict).
   * `${SPRUCE_PROJECT}/ref/picea_newref_target_regions.bed`: scaffolds with coverage, minus annotated repeats (+/- 500) bp and short (< 1,000 bp) intervening regions
   * `${SPRUCE_PROJECT}/bams/intersected/`: alignments intersected by `picea_newref_target_regions.bed`
-
 ---
 
 ## Dependencies
-
-List required modules, software, or packages:
-
 * [samtools](https://www.htslib.org/) v. 1.19.2
 * [bedtools](https://github.com/arq5x/bedtools2) v. 2.31.0
 * [picard](https://github.com/broadinstitute/picard) v. 3.3.0
 * Java v. 17.0.6
 
-
----
-
-## Notes & Gotchas
-
-* Any special instructions, known issues, or tips.
-* For example: ensure you run this after the reduced reference is built.
-* ...
