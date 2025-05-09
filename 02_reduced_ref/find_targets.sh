@@ -34,12 +34,6 @@ bedtools merge \
     -i "${REF}/spruce_repeats_buffered.bed" \
     > "${REF}/spruce_repeats_buffered_merged.bed"
 
-echo "Creating picea_newref.bed from FASTA index at $(date)"
-
-# Create a BED file of all regions in the reduced reference
-awk '{print $1 "\t0\t" $2}' "${REF}/picea_newref.fa.fai" \
-	| sort -k1,1 -k2,2n > "${REF}/picea_newref.bed"
-
 echo "Subtracting repeats and filtering regions at $(date)"
 
 # Subtract buffered repeat regions and filter out regions < 1,000 bp
