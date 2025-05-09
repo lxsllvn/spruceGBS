@@ -8,7 +8,7 @@ Briefly describe the purpose of this directory (one or two sentences).
 * **`reduced_reference_prep.sh`**: create new reference with only scaffolds with mapped reads
 * **`picard_dictionary.sh`**: make sequence dictionary for GATK (used in [04_realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment))
 * **`find_targets.sh`**: find potential sites for downstream analyses; this removes regions near/within/book-ended by annotated repeats
-* **`bam_intersection.sh`**: intersect the alignments from [01_read_alignments](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment) with the output of **`find_targets.sh`**
+* **`bam_intersection.sh`**: intersect [full alignments](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment) with the output of **`find_targets.sh`**
 ---
 
 ## Scaffold search
