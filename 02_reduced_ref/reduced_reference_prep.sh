@@ -23,3 +23,9 @@ sleep 1
 
 # Index the new reference
 samtools faidx "${SPRUCE_PROJECT}/ref/picea_newref.fa"
+
+echo "Creating picea_newref.bed from FASTA index at $(date)"
+
+# Create a BED file of all regions in the reduced reference
+awk '{print $1 "\t0\t" $2}' "${REF}/picea_newref.fa.fai" \
+	| sort -k1,1 -k2,2n > "${REF}/picea_newref.bed"
