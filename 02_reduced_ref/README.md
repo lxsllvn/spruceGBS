@@ -12,6 +12,7 @@ Briefly describe the purpose of this directory (one or two sentences).
 ---
 
 ## Scaffold search
+
 The P. abies reference genome is 12.4 Gb and has 10,253,694 scaffolds. This makes most downstream analyses extremely slow, have massive memory requirements, or just fail entirely (e.g. GATK, ANGSD). 
 
 Fortunately, most scaffolds have zero mapped reads in any sample. **`scaffolds_with_coverage.sh`** takes the per-sample read depths produced in [01_read_alignment](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment) and identifies scaffolds with \>= 5 mapped reads (with Q >= 20 and MQ >= 30) in any sample. A single sample is permissive, but I tested requiring 100 samples and the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
@@ -27,6 +28,7 @@ sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_f
 
 ---
 ## Reduced reference preparation
+
 Next, we created a reduced reference comprising only the 218,545 scaffolds with mapped reads with **`reduced_reference_prep.sh`**. This script uses `samtools` to extract the scaffolds from the full reference and index the reduced reference, and creates a bed file from `picea_newref.fa.fai`. 
 
 **`picard_dictionary.sh`** creates the sequence dictionary for the reduced reference that is needed by GATK for [indel realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment).
@@ -41,6 +43,7 @@ bash <script1>.sh arg1 arg2
 ```
 ---
 ## Identify target regions for analysis 
+
 The Picea nuclear genome is ca. 70% transposable elements. Many of these are collapsed in the aging P. abies reference assembly, but Illumina libraries seem unlikely to offer much repeat resolution anyway. In a previous experiment, I found that sites in annotated repeats have a consistent deficit of heterozygotes, regardless of the stringency of the genotype calls/likelihoods. Because these sites are unlikely to survive to the final set of genotype calls/likelihoods, I decided to remove them at this stage to reduce the computational demand of the indel realignment. 
 
 **`find_targets.sh`** takes a bed file of the annotated repeats, expands them by 500 bp on both sizes, subtracts these from `picea_newref.bed` and removes any short intervening regions (< 1000 bp) or scaffolds. This produces `picea_newref_target_regions.bed`, which are the initial set of sites for the subsequent steps. 
@@ -49,9 +52,9 @@ The Picea nuclear genome is ca. 70% transposable elements. Many of these are col
 ```bash
 bash <script1>.sh arg1 arg2
 ```
-
 ---
 ## BAM intersections
+
 intersect bams with target regions
 
 ## **`bam_intersection.sh` usage**
