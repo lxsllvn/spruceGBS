@@ -35,11 +35,11 @@ Next, we created a reduced reference comprising only the 218,545 scaffolds with 
 
 ## **`reduced_reference_prep.sh` usage**
 ```bash
-bash <script1>.sh arg1 arg2
+bash reduced_reference_prep.sh 
 ```
 ## **`picard_dictionary.sh` usage**
 ```bash
-bash <script1>.sh arg1 arg2
+bash picard_dictionary.sh
 ```
 ---
 ## Identify target regions for analysis 
@@ -50,7 +50,7 @@ The Picea nuclear genome is ca. 70% transposable elements. Many of these are col
 
 ## **`find_targets.sh` usage**
 ```bash
-bash <script1>.sh arg1 arg2
+bash find_targets.sh 
 ```
 ---
 ## BAM intersections
