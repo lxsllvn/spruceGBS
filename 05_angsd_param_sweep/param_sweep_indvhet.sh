@@ -30,7 +30,7 @@ BAQ_LIST=(0 1 2)
 C_LIST=(0 50)
 MINQ_LIST=(20 30)
 MINMAPQ_LIST=(20 30 40)
-DEFAULT_FILTERS="-remove_bads 1 -uniqueOnly 1 -only_proper_pairs 1 -skipTriallelic 1 -setMinDepthInd 3"
+DEFAULT_FILTERS="-remove_bads 1 -uniqueOnly 1 -only_proper_pairs 1 -setMinDepthInd 3"
 
 # Load modules
 ml GCC/10.2.0
@@ -133,7 +133,7 @@ domain="$(basename "$RESULTS_DIR")"
 domain="${domain%_results}"
 {
   printf "domain\tbaq\tC\tq\tmq\tct\tpop_code\tbam_code\tref_sites\talt_sites\n"
-  find "$RESULTS_DIR" -type f -name '*.sfs' | while IFS= read -r file; do
+   find "$RESULTS_DIR" -type f -name '*.sfs' ! -name 'gl.sfs' | while IFS= read -r file; do
     rel="${file#$RESULTS_DIR/}"
     IFS='/' read -r param_id pop subdir bamfile <<< "$rel"
     pop_code="$pop"
