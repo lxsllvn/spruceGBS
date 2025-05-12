@@ -1,6 +1,6 @@
 ## Overview
 
-This directory contains **Step 1: initial pre-processing and alignment** of the spruceGBS pipeline.  
+Implements **Step 1: initial pre-processing and alignment** of the spruceGBS pipeline.  
 
 ---
 
