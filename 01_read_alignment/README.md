@@ -1,8 +1,7 @@
 ## Overview
 
-This directory contains the initial pre-processing and alignment steps of the spruceGBS pipeline.  
-1. **`read_qc.sh`**: Performs adapter trimming, quality filtering and poly-X removal on raw FASTQ files using fastp.  
-2. **`bwa.sh`**: Aligns QC’d paired-end reads to the _Picea abies_ reference genome with BWA-MEM, sorts and indexes the resulting BAMs, and computes per-sample read depths.
+This directory contains **Step 1: initial pre-processing and alignment** of the spruceGBS pipeline.  
+
 ---
 
 ## Contents
@@ -14,6 +13,7 @@ This directory contains the initial pre-processing and alignment steps of the sp
 * **`bwa.sh`**  
   - Uses _BWA-MEM_ to map cleaned reads to the _P. abies_ reference, adds read-group tags, then pipes into _samtools sort_ and _samtools index_.  
   - Computes depth per base with `samtools depth` and writes per-sample depth files.
+
 ---
 
 ## Pre-processing and quality control
@@ -32,6 +32,7 @@ while IFS= read -r sample; do
     sbatch "$SCRIPTS/read_qc.sh" "$sample"
 done < sample.list
 ```
+
 ---
 
 ## Alignment
@@ -46,6 +47,7 @@ while IFS= read -r sample; do
     sbatch "$SCRIPTS/bwa.sh" "$sample"
 done < sample.list
 ```
+
 ---
 
 ## Inputs & Outputs
@@ -58,6 +60,7 @@ done < sample.list
   * `${SPRUCE_PROJECT}/reads/qc`: quality-controlled reads
   * `${SPRUCE_PROJECT}/bams/full_alignments`: sorted and indexed BAMs
   * `${SPRUCE_PROJECT}/bams/full_alignments/read_depths`: read depths per sample
+
 ---
 
 ## Dependencies
@@ -65,6 +68,7 @@ done < sample.list
 * [fastp](https://github.com/OpenGene/fastp) v. 0.23.4
 * [bwa](https://github.com/lh3/bwa) v. 0.7.18
 * [samtools](https://www.htslib.org/) v. 1.19.2
+
 ---
 
 
