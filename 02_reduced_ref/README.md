@@ -3,7 +3,9 @@
 Briefly describe the purpose of this directory (one or two sentences).
 
 ---
+
 ## Contents
+
 * **`scaffolds_with_coverage.sh`**: find scaffolds with >=5 mapped reads in any sample
 * **`reduced_reference_prep.sh`**: create new reference with only scaffolds with mapped reads
 * **`picard_dictionary.sh`**: make sequence dictionary for GATK (used in [04_realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment))
@@ -18,6 +20,7 @@ The P. abies reference genome is 12.4 Gb and has 10,253,694 scaffolds. This make
 Fortunately, most scaffolds have zero mapped reads in any sample. **`scaffolds_with_coverage.sh`** takes the per-sample read depths produced in [01_read_alignment](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment) and identifies scaffolds with \>= 5 mapped reads (with Q >= 20 and MQ >= 30) in any sample. A single sample is permissive, but I tested requiring 100 samples and the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
 
 ## **`scaffolds_with_coverage.sh` usage**
+
 ```bash
 #!/bin/bash
 sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_file]
@@ -25,8 +28,8 @@ sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_f
 * `<depth_dir>`   (required): directory holding *.depth files
 * `[scratch_dir]` (optional): temp dir for sorting (default: `${SPRUCE_PROJECT}/scaff_cov_tmp_$$`)
 * `[output_file]` (optional): desired output name (default: `${SPRUCE_PROJECT}/ref/scaffolds_with_coverage.txt`)
-
 ---
+
 ## Reduced reference preparation
 
 Next, we created a reduced reference comprising only the 218,545 scaffolds with mapped reads with **`reduced_reference_prep.sh`**. This script uses `samtools` to extract the scaffolds from the full reference and index the reduced reference, and creates a bed file from `picea_newref.fa.fai`. 
@@ -34,36 +37,43 @@ Next, we created a reduced reference comprising only the 218,545 scaffolds with 
 **`picard_dictionary.sh`** creates the sequence dictionary for the reduced reference that is needed by GATK for [indel realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment).
 
 ## **`reduced_reference_prep.sh` usage**
+
 ```bash
 bash reduced_reference_prep.sh 
 ```
 ## **`picard_dictionary.sh` usage**
+
 ```bash
 bash picard_dictionary.sh
 ```
 ---
+
 ## Identify target regions for analysis 
 
-The Picea nuclear genome is ca. 70% transposable elements. Many of these are collapsed in the aging P. abies reference assembly, but Illumina libraries seem unlikely to offer much repeat resolution anyway. In a previous experiment, I found that sites in annotated repeats have a consistent deficit of heterozygotes, regardless of the stringency of the genotype calls/likelihoods. Because these sites are unlikely to survive to the final set of genotype calls/likelihoods, I decided to remove them at this stage to reduce the computational demand of the indel realignment. 
+The *Picea* nuclear genome is ca. 70% transposable elements. Many of these are collapsed in the aging P. abies reference assembly, but Illumina libraries seem unlikely to offer much repeat resolution anyway. In a previous experiment, I found that sites in annotated repeats have a consistent deficit of heterozygotes, regardless of the stringency of the genotype calls/likelihoods. Because these sites are unlikely to survive to the final set of genotype calls/likelihoods, I decided to remove them at this stage to reduce the computational demand of the indel realignment. 
 
 **`find_targets.sh`** takes a bed file of the annotated repeats, expands them by 500 bp on both sizes, subtracts these from `picea_newref.bed` and removes any short intervening regions (< 1000 bp) or scaffolds. This produces `picea_newref_target_regions.bed`, which are the initial set of sites for the subsequent steps. 
 
 ## **`find_targets.sh` usage**
+
 ```bash
 bash find_targets.sh 
 ```
 ---
+
 ## BAM intersections
 
 intersect bams with target regions
 
 ## **`bam_intersection.sh` usage**
+
 ```bash
 #!/bin/bash
 while IFS= read -r sample; do
     sbatch "$SCRIPTS/bam_intersection.sh" "$sample"
 done < sample.list
 ```
+
 ---
 ## Inputs & Outputs
 
