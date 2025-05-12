@@ -1,6 +1,10 @@
 ## Overview
 
-Briefly describe the purpose of this directory (one or two sentences).
+This directory implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. It uses the read depths from the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) and repeat annotations from the [P.abies v. 1.0 assembly](https://plantgenie.org/FTP) to 
+1) identify scaffolds with mapped reads,
+2) create a reduced reference comprising only those scaffolds,
+3) make a buffered repeat mask and identify target regions for down-stream analysis, and
+4) intersect the full alignments with the target regions.
 
 ---
 
@@ -11,6 +15,7 @@ Briefly describe the purpose of this directory (one or two sentences).
 * **`picard_dictionary.sh`**: make sequence dictionary for GATK (used in [04_realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment))
 * **`find_targets.sh`**: find potential sites for downstream analyses; this removes regions near/within/book-ended by annotated repeats
 * **`bam_intersection.sh`**: intersect [full alignments](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment) with the output of **`find_targets.sh`**
+
 ---
 
 ## Scaffold search
@@ -25,9 +30,11 @@ Fortunately, most scaffolds have zero mapped reads in any sample. **`scaffolds_w
 #!/bin/bash
 sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_file]
 ```
+
 * `<depth_dir>`   (required): directory holding *.depth files
 * `[scratch_dir]` (optional): temp dir for sorting (default: `${SPRUCE_PROJECT}/scaff_cov_tmp_$$`)
 * `[output_file]` (optional): desired output name (default: `${SPRUCE_PROJECT}/ref/scaffolds_with_coverage.txt`)
+  
 ---
 
 ## Reduced reference preparation
@@ -41,11 +48,13 @@ Next, we created a reduced reference comprising only the 218,545 scaffolds with 
 ```bash
 bash reduced_reference_prep.sh 
 ```
+
 ## **`picard_dictionary.sh` usage**
 
 ```bash
 bash picard_dictionary.sh
 ```
+
 ---
 
 ## Identify target regions for analysis 
@@ -59,11 +68,12 @@ The *Picea* nuclear genome is ca. 70% transposable elements. Many of these are c
 ```bash
 bash find_targets.sh 
 ```
+
 ---
 
 ## BAM intersections
 
-intersect bams with target regions
+Finally, we intersected the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) with `picea_newref_target_regions.bed` using the `-L` argument of `samtools view`. Reads mapping outside of these intervals are treated as unmapped and are not included in the output. 
 
 ## **`bam_intersection.sh` usage**
 
