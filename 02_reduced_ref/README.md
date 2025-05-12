@@ -41,7 +41,7 @@ sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_f
 
 Next, we created a reduced reference comprising only the 218,545 scaffolds with mapped reads with **`reduced_reference_prep.sh`**. This script uses `samtools` to extract the scaffolds from the full reference and index the reduced reference, and creates a bed file from `picea_newref.fa.fai`. 
 
-**`picard_dictionary.sh`** creates the sequence dictionary for the reduced reference that is needed by GATK for [indel realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment).
+**`picard_dictionary.sh`** creates the sequence dictionary needed by GATK for [indel realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment).
 
 ## **`reduced_reference_prep.sh` usage**
 
@@ -59,7 +59,7 @@ bash picard_dictionary.sh
 
 ## Identify target regions for analysis 
 
-The *Picea* nuclear genome is ca. 70% transposable elements. Many of these are collapsed in the aging P. abies reference assembly, but Illumina libraries seem unlikely to offer much repeat resolution anyway. In a previous experiment, I found that sites in annotated repeats have a consistent deficit of heterozygotes, regardless of the stringency of the genotype calls/likelihoods. Because these sites are unlikely to survive to the final set of genotype calls/likelihoods, I decided to remove them at this stage to reduce the computational demand of the indel realignment. 
+The *Picea* nuclear genome is ca. 70% transposable elements. Many of these are collapsed in the aging *P. abies* v. 1.0 reference assembly, but Illumina libraries are unlikely to offer much repeat resolution anyway. In a previous experiment, I found that sites in annotated repeats have a consistent deficit of heterozygotes, regardless of the stringency of the genotype calls/likelihoods. Because these sites are unlikely to survive to the final set of genotype calls/likelihoods, I decided to remove them at this stage to reduce the computational demand of the indel realignment. 
 
 **`find_targets.sh`** takes a bed file of the annotated repeats, expands them by 500 bp on both sizes, subtracts these from `picea_newref.bed` and removes any short intervening regions (< 1000 bp) or scaffolds. This produces `picea_newref_target_regions.bed`, which are the initial set of sites for the subsequent steps. 
 
@@ -73,7 +73,7 @@ bash find_targets.sh
 
 ## BAM intersections
 
-Finally, we intersected the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) with `picea_newref_target_regions.bed` using the `-L` argument of `samtools view`. Reads mapping outside of these intervals are treated as unmapped and are not included in the output. 
+Finally, we intersected the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) with `picea_newref_target_regions.bed` using the `-L` argument of `samtools view`. Reads mapping outside of these intervals are treated as unmapped and are not included in the output. These are the input for the next step, [indel realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment).
 
 ## **`bam_intersection.sh` usage**
 
