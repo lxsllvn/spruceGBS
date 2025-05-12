@@ -25,7 +25,7 @@ OUTPUT="$1"
 BAMS="$2"
 
 # Output header
-echo -e "bam_code\tn_scaffolds_with_mapped_reads\ttotal_mapped_reads" > "${OUTPUT}.tsv"
+echo -e "bam_code\tn_scaffolds\tn_reads" > "${OUTPUT}.tsv"
 
 # Loop through each BAM file
 for BAM in "${BAMS}"/*.bam; do
@@ -34,10 +34,10 @@ for BAM in "${BAMS}"/*.bam; do
     echo "Processing ${BAM_CODE} at $(date)"
 
     # Use samtools idxstats to count non-zero scaffolds and total mapped reads
-    MAPPED_SCAFFOLDS=$(samtools idxstats "$BAM" | awk '$3 > 0' | wc -l)
-    TOTAL_MAPPED=$(samtools idxstats "$BAM" | awk '{sum += $3} END {print sum}')
+    N_SCAFFOLDS=$(samtools idxstats "$BAM" | awk '$3 > 0' | wc -l)
+    N_MAPPED=$(samtools idxstats "$BAM" | awk '{sum += $3} END {print sum}')
 
-    echo -e "${BAM_CODE}\t${MAPPED_SCAFFOLDS}\t${TOTAL_MAPPED}" >> "${OUTPUT}.tsv"
+    echo -e "${BAM_CODE}\t${N_SCAFFOLDS}\t${N_MAPPED}" >> "${OUTPUT}.tsv"
 done
 
 echo "Finished at $(date)"
