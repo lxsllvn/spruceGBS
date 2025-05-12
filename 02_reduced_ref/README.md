@@ -1,6 +1,6 @@
 ## Overview
 
-This directory implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. It uses read depths from the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) and repeat annotations from the P.abies v. 1.0 [assembly](https://plantgenie.org/FTP) to:
+Implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. It uses read depths from the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) and repeat annotations from the P.abies v. 1.0 [assembly](https://plantgenie.org/FTP) to:
 1) identify scaffolds with mapped reads,
 2) create a reduced reference comprising only those scaffolds,
 3) make a buffered repeat mask and identify target regions for down-stream analysis, and
