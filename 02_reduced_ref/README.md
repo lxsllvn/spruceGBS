@@ -1,6 +1,6 @@
 ## Overview
 
-This directory implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. It uses the read depths from the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) and repeat annotations from the P.abies v. 1.0 [assembly](https://plantgenie.org/FTP) to:
+This directory implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. It uses read depths from the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) and repeat annotations from the P.abies v. 1.0 [assembly](https://plantgenie.org/FTP) to:
 1) identify scaffolds with mapped reads,
 2) create a reduced reference comprising only those scaffolds,
 3) make a buffered repeat mask and identify target regions for down-stream analysis, and
@@ -10,7 +10,7 @@ This directory implements **Step 2: reduced reference preparation** of the spruc
 
 ## Contents
 
-* **`scaffolds_with_coverage.sh`**: find scaffolds with >=5 mapped reads in any sample
+* **`scaffolds_with_coverage.sh`**: find scaffolds with ≥5 mapped reads in any sample
 * **`reduced_reference_prep.sh`**: create new reference with only scaffolds with mapped reads
 * **`picard_dictionary.sh`**: make sequence dictionary for GATK (used in [04_realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment))
 * **`find_targets.sh`**: find potential sites for downstream analyses; this removes regions near/within/book-ended by annotated repeats
@@ -20,7 +20,7 @@ This directory implements **Step 2: reduced reference preparation** of the spruc
 
 ## Scaffold search
 
-The P. abies reference genome is 12.4 Gb and has 10,253,694 scaffolds. This makes most downstream analyses extremely slow, have massive memory requirements, or just fail entirely (e.g. GATK, ANGSD). 
+The *P. abies* reference genome is 12.4 Gb and has 10,253,694 scaffolds. This makes most downstream analyses extremely slow, have massive memory requirements, or just fail entirely (e.g. GATK, ANGSD). 
 
 Fortunately, most scaffolds have zero mapped reads in any sample. **`scaffolds_with_coverage.sh`** takes the per-sample read depths produced in [01_read_alignment](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment) and identifies scaffolds with \>= 5 mapped reads (with Q >= 20 and MQ >= 30) in any sample. A single sample is permissive, but I tested requiring 100 samples and the resulting number of scaffolds were not really that different (218,545 vs. 162,766). 
 
