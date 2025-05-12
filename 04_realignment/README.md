@@ -1,6 +1,6 @@
 ## Overview
 
-This directory implements the indel realignment steps of the spruceGBS pipeline using GATK 3.7.
+Implements **Step 4: indel realignment** of the spruceGBS pipeline using GATK 3.7.
 
 ---
 
