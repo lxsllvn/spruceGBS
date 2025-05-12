@@ -33,53 +33,56 @@ Samples had a median of 515,455 mapped reads (IQR = 762,618) to 7,983 (IQR = 2,7
 Code to reproduce the figure and and list of failed samples is provided below. Note that `write.unix()` is a wrapper for read.table to enforce Unix line-endings on Windows, available here. 
 
 ```R
-# Load table with bam_code, total_mapped_reads, 
+# Load table with bam_code, total_mapped_reads,
 # and n_scaffolds_with_mapped_reads
-depth_summary <- read.table("intersected_bam_mapping_summary.tsv", 
-							header = TRUE)
+depth_summary <- read.table("intersected_bam_mapping_summary.tsv",
+                            header = TRUE)
 
 # Find lowest 10%
-cutoff_reads <- quantile(log(depth_summary$n_reads), 
-						 probs=c(0.1))
+cutoff_reads  <- quantile(log(depth_summary$n_reads),
+                         probs = c(0.1))
 cutoff_scaffs <- quantile(log(depth_summary$n_scaffolds),
-						  probs=c(0.1))
+                          probs = c(0.1))
 
 # Plot of the distribution of read counts and scaffolds covered
-p <- ggplot(depth_summary) + 
-	 geom_density(aes(x = log(n_reads)), 
-	 fill = "dodgerblue", alpha = 0.4) +
-     xlab("log(n reads)") + 
-     geom_vline(xintercept = cutoff_reads) + 
-     theme_minimal()
+library(ggplot2)
 
-p1 <- ggplot(depth_summary) + 
-	  geom_density(aes(x = log(n_scaffolds)), 
-      fill = "dodgerblue", alpha = 0.4) +
-	  xlab("log(n scaffolds)") + 
-	  geom_vline(xintercept = cutoff_scaffs) + 
-	  theme_minimal() + theme(axis.title.y = element_blank())
+p <- ggplot(depth_summary) +
+  geom_density(aes(x = log(n_reads)),
+               fill = "dodgerblue", alpha = 0.4) +
+  xlab("log(n reads)") +
+  geom_vline(xintercept = cutoff_reads) +
+  theme_minimal()
 
-combined <- p + p1 
+p1 <- ggplot(depth_summary) +
+  geom_density(aes(x = log(n_scaffolds)),
+               fill = "dodgerblue", alpha = 0.4) +
+  xlab("log(n scaffolds)") +
+  geom_vline(xintercept = cutoff_scaffs) +
+  theme_minimal() +
+  theme(axis.title.y = element_blank())
 
-ggsave("sample_intial_qc.pdf", 
-	   plot = combined,
+combined <- p + p1
+
+ggsave("sample_initial_qc.pdf", plot = combined,
        width = 6.64, height = 3.07)
 
-# Extract bam_codes of failed samples and create a file to
-# hold information about failed samples.
-fail <- subset(depth_summary, log(n_reads) < cutoff_reads 
-				| log(n_scaffolds) < cutoff_scaffs)
+# Extract bam_codes of failed samples and create a file for them
+fail <- subset(depth_summary,
+               log(n_reads)     < cutoff_reads |
+               log(n_scaffolds) < cutoff_scaffs)
 
-df <- data.frame("bam_code" = fail$bam_code,
-                 "n_reads" = fail$n_reads,
-                 "n_scaffoldss" = fail$n_scaffolds,
-                 "flag" = "FAIL",
-                 "reason" = "initial depth")
-                 
-write.unix(df, "intial_qc_failed_samples.txt", # use write.table on Mac/Unix
-		         row.names = FALSE, 
-		         col.names = TRUE, 
-		         quote = FALSE)
+df <- data.frame(
+  bam_code    = fail$bam_code,
+  n_reads     = fail$n_reads,
+  n_scaffolds = fail$n_scaffolds,  # fixed typo
+  flag        = "FAIL",
+  reason      = "initial depth")
+
+# Use write.table on Mac/Unix
+write.table(df, "initial_qc_failed_samples.txt",
+            row.names = FALSE, col.names = TRUE,
+            quote = FALSE)
 ```
 ---
 
