@@ -1,12 +1,12 @@
 ## Overview
 
-Briefly describe the purpose of this directory (one or two sentences).
+Implements **Step 3: initial sample quality control** of the spruceGBS pipeline. This is a super-basic filter pass to remove samples with the lowest depth and/or breadth of coverage.  
 
 ---
 
 ## Contents
 
-* **`bam_mapping_summary.sh`**: Short description of what this script does.
+* **`bam_mapping_summary.sh`**: finds the number of mapped scaffolds and the total number of mapped reads per sample and returns a summary dataframe
 
 ---
 ## Sequencing depth and breadth per sample
@@ -84,16 +84,15 @@ write.table(df, "initial_qc_failed_samples.txt",
             row.names = FALSE, col.names = TRUE,
             quote = FALSE)
 ```
+
 ---
 
 ## Inputs & Outputs
 
 * **Inputs**:
-
   * `$SPRUCE_PROJECT/bams/intersected`: BAMs after [intersection with target regions](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref).
     
 * **Outputs**:
-
   * `$SPRUCE_PROJECT/intersected_bam_mapping_summary.tsv`: dataframe with the sample bam code (bam_code), number of mapped reads (n_reads), and  number of mapped scaffolds (n_scaffolds)
   * `intial_qc_failed_samples.txt`: dataframe of failed samples, with columns for bam_code, n_reads, n_scaffolds, flag, and the reason for the fail flag (reason)
   
