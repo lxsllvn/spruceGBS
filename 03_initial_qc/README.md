@@ -6,49 +6,102 @@ Briefly describe the purpose of this directory (one or two sentences).
 
 ## Contents
 
-* **`<script1>.sh`**: Short description of what this script does.
-* **`<script2>.R`**: Short description of what this analysis or step does.
-* **`...`**
+* **`bam_mapping_summary.sh`**: Short description of what this script does.
 
 ---
+## Sequencing depth and breadth per sample
 
-## Usage
+While genotype likelihoods are useful for low-depth sequences, variation in depth and/or coverage among samples can bias estimates of diversity and structure.
 
-Provide example commands demonstrating a typical invocation:
+In later steps, we systematically estimate the minimum depth/coverage required for analysis, but the lowest quality samples are not salvageable (I tried) and can be removed at this stage. We calculated the number of scaffolds with at least 1 mapped read and the total number of mapped reads for each sample using **bam_mapping_summary.sh**.
+
+## **`bam_mapping_summary.sh`** usage
 
 ```bash
-bash <script1>.sh arg1 arg2
-Rscript <script2>.R input_file output_file
+#!/bin/bash
+sbatch "$SCRIPTS/bam_mapping_summary.sh" \
+    "$SPRUCE_PROJECT/intersected_bam_mapping_summary" \ # outname
+    "$SPRUCE_PROJECT/bams/intersected" # path to bams
 ```
 
+## Visualization and removal
+
+Samples had a median of 515,455 mapped reads (IQR = 762,618) to 7,983 (IQR = 2,724) scaffolds. Samples below the 10th percentile in either metrics (indicated by black, vertical lines) were removed (n = 208).
+
+![sample_intial_qc](https://github.com/user-attachments/assets/24274798-021a-43ed-a290-872868966bf2)
+
+Code to reproduce the figure and and list of failed samples is provided below. Note that `write.unix()` is a wrapper for read.table to enforce Unix line-endings on Windows, available here. 
+
+```R
+# Load table with bam_code, total_mapped_reads, 
+# and n_scaffolds_with_mapped_reads
+depth_summary <- read.table("intersected_bam_mapping_summary.tsv", 
+							header = TRUE)
+
+# Find lowest 10%
+cutoff_reads <- quantile(log(depth_summary$n_reads), 
+						 probs=c(0.1))
+cutoff_scaffs <- quantile(log(depth_summary$n_scaffolds),
+						  probs=c(0.1))
+
+# Plot of the distribution of read counts and scaffolds covered
+p <- ggplot(depth_summary) + 
+	 geom_density(aes(x = log(n_reads)), 
+	 fill = "dodgerblue", alpha = 0.4) +
+     xlab("log(n reads)") + 
+     geom_vline(xintercept = cutoff_reads) + 
+     theme_minimal()
+
+p1 <- ggplot(depth_summary) + 
+	  geom_density(aes(x = log(n_scaffolds)), 
+      fill = "dodgerblue", alpha = 0.4) +
+	  xlab("log(n scaffolds)") + 
+	  geom_vline(xintercept = cutoff_scaffs) + 
+	  theme_minimal() + theme(axis.title.y = element_blank())
+
+combined <- p + p1 
+
+ggsave("sample_intial_qc.pdf", 
+	   plot = combined,
+       width = 6.64, height = 3.07)
+
+# Extract bam_codes of failed samples and create a file to
+# hold information about failed samples.
+fail <- subset(depth_summary, log(n_reads) < cutoff_reads 
+				| log(n_scaffolds) < cutoff_scaffs)
+
+df <- data.frame("bam_code" = fail$bam_code,
+                 "n_reads" = fail$n_reads,
+                 "n_scaffoldss" = fail$n_scaffolds,
+                 "flag" = "FAIL",
+                 "reason" = "initial depth")
+                 
+write.unix(df, "intial_qc_failed_samples.txt", # use write.table on Mac/Unix
+		         row.names = FALSE, 
+		         col.names = TRUE, 
+		         quote = FALSE)
+```
 ---
 
 ## Inputs & Outputs
 
 * **Inputs**:
 
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
+  * `$SPRUCE_PROJECT/bams/intersected`: BAMs after [intersection with target regions](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref).
+    
 * **Outputs**:
 
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
-
+  * `$SPRUCE_PROJECT/intersected_bam_mapping_summary.tsv`: dataframe with the sample bam code (bam_code), number of mapped reads (n_reads), and  number of mapped scaffolds (n_scaffolds)
+  * `intial_qc_failed_samples.txt`: dataframe of failed samples, with columns for bam_code, n_reads, n_scaffolds, flag, and the reason for the fail flag (reason)
+  
 ---
 
 ## Dependencies
 
 List required modules, software, or packages:
 
-* Bash (with `set -euo pipefail` recommended)
-* [samtools](https://www.htslib.org/) >= 1.9
-* R (packages: tidyverse, data.table, ...)
-* ...
+* [samtools](https://www.htslib.org/) v. 1.19.2
+* R (packages: ggplot2)
+* write.unix() for Windows
 
 ---
-
-## Notes & Gotchas
-
-* Any special instructions, known issues, or tips.
-* For example: ensure you run this after the reduced reference is built.
-* ...
