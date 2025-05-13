@@ -153,27 +153,21 @@ Then, if *T* ≤ *C*, the new MQ is $= C×sqrt((C−T)/C)$ up to a maximum of *C
 
 This down-weights moderately noisy alignments and eliminate the worst ones. Choosing *C* below the read aligner’s maximum MQ (e.g. < 60) will increasingly penalize true heterozygote reads (which carry one genuine mismatch), whereas higher values of  *C*  filter only the most egregious misalignments. 
 
-## Usage
+## Library call rates
 
-Provide example commands demonstrating a typical invocation:
+Filtering on overall site call-rate (e.g. "discard any site called in < X % of all samples") can hide, or even worsen, systematic missingness that tracks sequencing library rather than biology. When one library routinely fails to call certain loci (due to GBS fragment size-selection, DNA quality, GC/AT bias, or simply lower depth), those sites carry a “library fingerprint” of missing data. Downstream tools (PCA, ADMIXTURE) that impute or mean-replace missing genotypes will then recover batch effects instead of true population structure.
 
-```bash
-bash <script1>.sh arg1 arg2
-Rscript <script2>.R input_file output_file
-```
+# Experimental design
 
----
+## Sample selection
 
-## Inputs & Outputs
+## Scaffold selection
 
-* **Inputs**:
+# Site and population-level statistics
 
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
-* **Outputs**:
+#  MANOVA on principal coordinates 
 
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
+# Individual heterozygosity
 
 ---
 
