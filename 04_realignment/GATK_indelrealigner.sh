@@ -14,17 +14,12 @@ if [ -z "$SAMPLE" ]; then
 fi
 
 # Set paths
-GATK="/pfs/proj/nobackup/fs/projnb10/wanglab-2020/Alex/alignments"
 REF="${SPRUCE_PROJECT}/ref/picea_newref.fa"
 INPUT="${SPRUCE_PROJECT}/bams/intersected"
 TARGETS="${SPRUCE_PROJECT}/bams/realigned/realign_intervals"
 
 # Set output directory
 OUTDIR="${SPRUCE_PROJECT}/bams/realigned"
-
-# Use local Java 8 install for compatibility with GATK 3.7
-export JAVA_HOME="/pfs/proj/nobackup/fs/projnb10/wanglab-2020/Alex/java/jdk8u392-b08"
-export PATH="$JAVA_HOME/bin:$PATH"
 
 # Load required modules
 ml GCC/13.2.0
