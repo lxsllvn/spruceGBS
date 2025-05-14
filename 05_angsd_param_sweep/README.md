@@ -13,14 +13,23 @@ Briefly describe the purpose of this directory (one or two sentences).
 ---
 # Objectives
 
-Identify settings that minimize technical artifacts (e.g., batch effects, allelic dropout) while retaining true biological signal
+Identify settings that minimize technical artifacts (e.g., batch effects, allelic dropout) while retaining biological signal.
 
 - **Base quality**: `-minQ 20`, `30` 
 - **Mapping quality**: `-minMapQ 20`, `30`, `40`
 - **BAQ model**: `-baq 0`, `1`, `2`
 - **Coefficient for capping mapping qualities**: `-C 0`, `50`
-- **Library call rates** Per-library missing data filters (\< 40, 50, and 60%),
+- **Library call rates** Per-library missing data filters (\< 40, 50, and 60%)
 
+1) Population-level site statistics:
+	- influence of filter parameters on H<sub>e</sub>, H<sub>o</sub>, F, π, Θ<sub>w</sub>, and MAF 
+	- identify combinations that lead to biologically implausible results
+2) PCA and MANOVA on principal coordinates:
+	- test variance explained by library and geographic region
+3) Individual heterozygosity estimates: 
+	- find combinations that decrease/increase individual variation in mixed-library populations
+ - 
+# Filter parameters 
 ## Minimum base quality (`-minQ`)
 
 Our dataset includes libraries sequenced on the HiSeq and NovaSeq. We attempted to mitigate platform differences during read quality control, but identifying an appropriate minimum base quality must account for three important differences: 
