@@ -88,15 +88,15 @@ done < sample.list
 ## Inputs & Outputs
 
 **Inputs**:
-    * `${SPRUCE_PROJECT}/bams/full_alignments/`: alignments to the full P.abies reference, created [here](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/).
-    * `${SPRUCE_PROJECT}/bams/full_alignments/read_depths`: read depths per sample, created during [alignment](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/).
-    * `${SPRUCE_PROJECT}/ref/Pabies1.0-genome.fa`: the [reference genome](https://plantgenie.org/FTP)
-    * `${SPRUCE_PROJECT}/ref/spruce_repeats.bed`: annotated repeat bed file, converted from the gffs available [here](https://plantgenie.org/FTP)
+* `${SPRUCE_PROJECT}/bams/full_alignments/`: alignments to the full P.abies reference, created [here](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/)
+* `${SPRUCE_PROJECT}/bams/full_alignments/read_depths`: read depths per sample, created during [alignment](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/)
+* `${SPRUCE_PROJECT}/ref/Pabies1.0-genome.fa`: the [reference genome](https://plantgenie.org/FTP)
+* `${SPRUCE_PROJECT}/ref/spruce_repeats.bed`: annotated repeat bed file, converted from the gffs available [here](https://plantgenie.org/FTP)
     
 **Outputs**:
-    * `${SPRUCE_PROJECT}/ref/picea_newref.fa`: reduced reference genome with fasta index (\*\.fai) and sequence dictionary (\*\.dict)
-    * `${SPRUCE_PROJECT}/ref/picea_newref_target_regions.bed`: scaffolds with coverage, minus annotated repeats (+/- 500) bp and short (< 1,000 bp) intervening regions
-    * `${SPRUCE_PROJECT}/bams/intersected/`: alignments intersected by `picea_newref_target_regions.bed`
+* `${SPRUCE_PROJECT}/ref/picea_newref.fa`: reduced reference genome with fasta index (\*\.fai) and sequence dictionary (\*\.dict)
+*  `${SPRUCE_PROJECT}/ref/picea_newref_target_regions.bed`: scaffolds with coverage, minus annotated repeats (+/- 500) bp and short (< 1,000 bp) intervening regions
+* `${SPRUCE_PROJECT}/bams/intersected/`: alignments intersected by `picea_newref_target_regions.bed`
     
 ---
 
