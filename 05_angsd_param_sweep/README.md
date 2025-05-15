@@ -1,16 +1,19 @@
-## Overview
+# Overview
 
 Briefly describe the purpose of this directory (one or two sentences).
 
 ---
 
-## Contents
+# Contents
 
 * **`<script1>.sh`**: Short description of what this script does.
 * **`<script2>.R`**: Short description of what this analysis or step does.
 * **`...`**
 
 ---
+
+# Objectives
+
 Variant filters have a profound impact on downstream estimates of population structure and diversity, with the potential to either mitigate or exacerbate biases introduced during wet-lab protocols. Choosing optimal filter parameters is particularly critical for this dataset, which presents several challenges: a non-model organism with a large and repetitive genome, multiple diverged lineages, sequencing across different libraries and platforms, and alignment to a highly fragmented reference genome.
 
 Our objective was to assess the influence of filter parameter settings across three key analyses, aiming to minimize technical artifacts (e.g., batch effects, allelic dropout) while preserving known biological signal:
@@ -37,6 +40,8 @@ To further refine parameter choices, we extended analyses to a wider range of `-
 
 Below, we discuss the potential effects of each filter parameter. For implementation details, skip to [Experimental-design](https://github.com/lxsllvn/spruceGBS/edit/main/05_angsd_param_sweep/README.md#experimental-design).
 
+---
+
 # Filter parameters 
 
 ## Minimum base quality (`-minQ`)
@@ -46,7 +51,7 @@ Our dataset includes libraries sequenced on the HiSeq and NovaSeq. We attempted 
 2. **Binned vs. continuous Q‐scores**. The HiSeq reports continuous Phred scores, whereas the Novoseq collapses Q scores in two eight discrete bins. As a result, the same reported Q score does not necessarily indicate the same error probability. 
 3. **Underlying error spectra**. Platforms can differ in the type of sequencing errors they produce (e.g.) and the context of these errors. Hiseq reads show pronounced cycle-dependent quality drop-offs and errors tend to cluster in just a few sequence contexts (e.g. [Minoche et al. 2011](https://genomebiology.biomedcentral.com/articles/10.1186/gb-2011-12-11-r112)). NovaSeq reads are enriched for poly-g artifacts as a result of their 2-channel chemistry, but other error rates tend to be more uniform across sequence contexts (e.g. [Ma et al. 2019](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1659-6)).
 
-In addition, samples differ in the quality and amount of their starting DNA. Degraded DNA may show more deamination artefacts and lower per‐base quality, and the minimum Q must balance  false positives against the risk of exacerbating library-specific missingness. 
+In addition, samples differ in the quality and amount of their starting DNA. Degraded DNA may show more deamination artefacts and lower per‐base quality, and the minimum Q must balance false positives against the risk of exacerbating library-specific missingness. 
 
 ## Minimum mapping quality (`-minMapQ`)
 
@@ -180,6 +185,18 @@ Filtering on overall site call-rate can hide, or even worsen, systematic missing
 
 ## Sample selection
 
+We identified samples from each domain where library effects should be most distinguishable from real genetic structure. Specifically, these samples were:
+
+1.  ≥ 25% percentile in mapped reads and scaffold coverage to exclude potentially unrepresentative marginal samples
+2. from populations (i.e., a single collection site) with ≥ 5 sampled trees, 
+
+and were:
+
+3. from stands where ≤75% of trees were sequenced in a single library (56% on average), or
+4. within 100 km (≤ 250 km for Siberia) of a population with a different majority library.
+
+Given the outcrossing mating system of *Picea*, trees from the same collection site are unlikely to deviate from Hardy-Weinberg equilibrium or show strong variation in individual heterozygosity. Genetic structure develops slowly in *Picea*, making batch effects a likely source of any apparent differentiation between stands in relatively close proximity. 
+
 ## Scaffold selection
 
 # Site and population-level statistics
@@ -190,7 +207,7 @@ Filtering on overall site call-rate can hide, or even worsen, systematic missing
 
 ---
 
-## Dependencies
+# Dependencies
 
 List required modules, software, or packages:
 
@@ -201,7 +218,7 @@ List required modules, software, or packages:
 
 ---
 
-## Notes & Gotchas
+# Notes & Gotchas
 
 * Any special instructions, known issues, or tips.
 * For example: ensure you run this after the reduced reference is built.
