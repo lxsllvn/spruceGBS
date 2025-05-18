@@ -1,6 +1,6 @@
 # Overview
 
-Briefly describe the purpose of this directory (one or two sentences).
+Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 
 ---
 
@@ -15,14 +15,13 @@ Briefly describe the purpose of this directory (one or two sentences).
 * [Parameter sweep: PCA and MANOVA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates)
 * [Parameter sweep: individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity)
 
-
 ---
 
 # Scripts
 
 * **`param_exp_cap_mapq.py`**:
-* **`param_exp_sample_selection.R`**: Short description of what this script does.
-* **`param_exp_ref_step1.sh`**: Short description of what this analysis or step does.
+* **`param_exp_sample_selection.R`**: 
+* **`param_exp_ref_step1.sh`**: 
 * **`param_exp_ref_step2.sh`**:
 * **`param_exp_ref_step3.sh`**:
 * **`param_exp_popstats.sh`**:
@@ -260,13 +259,34 @@ Finding sites that yield enough SNPs for analysis while minimizing resources dur
 
 ### Create reference subsets
 
+select 100 Mbp from the longest putatively non-contaminant scaffolds (i.e., those without "putative contaminant" in their fasta headers), divided this into 10 subsets, and created a indexed reference genome and ANGSD region and site files
+
 #### `param_exp_ref_step1.sh` usage
 
 ```
 #!/bin/bash
+sbatch param_exp_ref_step1.sh \
+    "$SPRUCE_PROJECT/parameter_testing/exp_ref" \
+    "$SPRUCE_PROJECT/ref/picea_newref_target_regions.bed" \
+    "$SPRUCE_PROJECT/ref/ref_putative_contaminants.bed" \
+    "$SPRUCE_PROJECT/ref/picea_newref.fa"
 ```
 
+**Inputs**
+* `$1` – output directory for the reference subsets
+* `$2` – bed file of [target regions](https://github.com/lxsllvn/spruceGBS/blob/main/02_reduced_ref/)
+* `$3` – bed file of potential contaminant scaffolds; parsed from `Pabies1.0-genome.fa` fasta headers
+* `$4` – path to [reduced reference genome](https://github.com/lxsllvn/spruceGBS/blob/main/02_reduced_ref/)
+
+**Outputs**
+* `experiment_ref_pt_a{a..j}.fa` - reference subset fasta
+* `experiment_ref_pt_a{a..j}.fai` - fasta index
+* `target_scaff_pt_a{a..j}_regions` - ANGSD region file
+* `target_scaff_pt_a{a..j}_sites` - ANGSD sites file
+
 ### Domain-level site discovery
+
+For each domain, I then calculated the read count matrix of each reference subset using the most lenient set of filter combinations (-baq 0 -C 0 -minQ 20 -minMapQ 20) and required a site to be present in at least half the samples.
 
 #### `param_exp_ref_step2.sh` usage
 
@@ -275,7 +295,6 @@ Finding sites that yield enough SNPs for analysis while minimizing resources dur
 ```
 #!/bin/bash
 # Loop through parameter sets a to j and submit each job to SLURM
-
 for i in {a..j}; do
     sbatch "$SCRIPTS/angsd_param_exp_discovery.sh" \
         "$i" \
@@ -286,18 +305,20 @@ done
 ```
 
 **Inputs**
-* `$1` – The chunk index (e.g., `a`, `b`, ...)
-* `$2` – The domain or region (e.g., `southern`)
-* `$3` – Path to the BAM list file (list of input BAMs)
-* `$4` – Output directory for results
+* `$1` – the chunk index (e.g., `a`, `b`, ...)
+* `$2` – the domain or region (e.g., `southern`)
+* `$3` – path to the BAM list file (list of input BAMs)
+* `$4` – output directory for results
 
 **Outputs**
-* read count matrices (`*.counts.gz`) for each chunk
-* scaffold and position names (`*.pos.gz`) for each chunk
+* `${DOMAIN}_target_scaff_pt_a{a..j}.counts.gz` - read count matrices for each chunk 
+* `${DOMAIN}_target_scaff_pt_a{a..j}.pos.gz` - scaffold and position names for each chunk
 
-** NB! ** The `*.counts.gz` matrix does not have informative row or column names. Most, but not all, ANGSD output follows this convention. Some files with positional data from ANGSD use `chr` and `pos`, like `*.pos.gz`, but others use `Chromo` and `position` and there's probably other versions as well. 
+** NB! ** The `.counts.gz` matrix does not have informative row or column names. Most, but not all, ANGSD output follows this convention. Some files with positional data from ANGSD use `chr` and `pos`, like `.pos.gz`, but others use `Chromo` and `position` and there's probably other versions as well. 
 
 ### Experimental reference preparation
+
+Then, concatenate the pos.gzs, parse into a bed file and ANGSD region and site files, and build and index experimental reference  
 
 #### `param_exp_ref_step3.sh` usage
 
@@ -311,11 +332,16 @@ sbatch ${SCRIPTS}/angsd_param_exp_domain_refprep.sh \
 
 **Inputs**
 - `$1` – the domain or region (e.g., `southern`)
-- `$2` – directory containing `*.pos.gz` and `*.counts.gz` for each chunk; created in Step 2
+- `$2` – directory containing `${DOMAIN}_target_scaff_pt_a{a..j}.counts.gz` and `${DOMAIN}_target_scaff_pt_a{a..j}.pos.gz` ` for each chunk; created by `param_exp_ref_step2.sh`
 - `$3` – output directory for the reference files
 
 **Output**
-* a single `*.bed`, `*sites`, `*regions`, `*.fa` and `*.fai` file for a domain
+* An experimental reference comprising sites with < 50% missing data and associated files per domain:
+ * `${DOMAIN}_experiment_ref.fa`
+ * `${DOMAIN}_experiment_ref.fa.fai`
+ * `${DOMAIN}_experiment_ref.bed`
+ * `${DOMAIN}_experiment_ref_sites`
+ * `${DOMAIN}_experiment_ref_regions`
 
 # Site and population-level statistics
 
