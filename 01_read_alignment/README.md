@@ -7,22 +7,22 @@ Implements **Step 1: initial pre-processing and alignment** of the spruceGBS pip
 ## Contents
 
 * **`read_qc.sh`**  
-  - Trims adapters and low-quality bases (with `--cut_front`, `--cut_right`), removes poly-X tails (`-x`) and low-entropy reads (`-y`) using _fastp_.  
+  - Trims adapters and low-quality bases (with `--cut_front`, `--cut_right`), removes poly-X tails (`-x`) and low-entropy reads (`-y`) using `fastp`.  
   - Generates cleaned FASTQ files, HTML report, and JSON stats for each sample.
 
 * **`bwa.sh`**  
-  - Uses _BWA-MEM_ to map cleaned reads to the _P. abies_ reference, adds read-group tags, then pipes into _samtools sort_ and _samtools index_.  
+  - Uses `BWA-MEM` to map cleaned reads to the _P. abies_ reference, adds read-group tags, then pipes into `samtools sort`and `samtools index`.  
   - Computes depth per base with `samtools depth` and writes per-sample depth files.
 
 ---
 
 ## Pre-processing and quality control
 
-Reads were demultiplexed using the process_radtags module of Stacks v.2.0. Adapter sequences and low-quality bases were removed with fastp, using **`read_qc.sh`**.
+Reads were demultiplexed using the process_radtags module of `Stacks v.2.0`. Adapter sequences and low-quality bases were removed with `fastp`, using **`read_qc.sh`**.
 
 Most libraries were sequenced on the HiSeq 2500, but two (*ca*. 600 samples) were sequenced on the Illumina NovaSeq. This is a bit unfortunate because the two platforms differ substantially. Unlike earlier platforms, Novoseq uses a two-channel system, and thus low-quality bases potentially result in spurious G calls, and quality scores are binned into Q10, Q20, Q30, and Q40. These differences can bias down-stream genetic analyses (e.g. [Lou and Therkildsen, 2021](https://doi.org/10.1111/1755-0998.13559)).
 
-To help mitigate the potential effects of the differing platforms, I trimmed poly-X tails (`-x`), low entropy sequences (``-y``) and more aggressively filtered low-quality bases using the `--cut_front` and `--cut_right` options in fastp, which trim trailing and leading bases if the mean quality in a 4 bp window drops below 20. I analyzed overrepresented k-mers (`-p`) and visually assessed the reduction in poly-X, in addition to sanity-checking the filtered HiSeq *vs*. Novoseq reads.
+To help mitigate the potential effects of the differing platforms, I trimmed poly-X tails (`-x`), low entropy sequences (``-y``) and more aggressively filtered low-quality bases using the `--cut_front` and `--cut_right` options in `fastp`, which trim trailing and leading bases if the mean quality in a 4 bp window drops below 20. I analyzed overrepresented k-mers (`-p`) and visually assessed the reduction in poly-X, in addition to sanity-checking the filtered HiSeq *vs*. Novaseq reads.
 
 ## **`read_qc.sh`** usage
 

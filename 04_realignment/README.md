@@ -37,10 +37,11 @@ done < sample.list
 ```
 
 * **Inputs**:
-    *  `sample.list`: list of bam codes of samples surviving [intial QC](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc)
-     *  `${SPRUCE_PROJECT}/ref/picea_newref.fa`: the [reduced reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
-     * `${SPRUCE_PROJECT}/ref/picea_newref_target_regions.bed`: the [target regions for analysis](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref) 
-      * `${SPRUCE_PROJECT}/bams/intersected`: path to [bams intersected by `picea_newref_target_regions.bed`](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref) 
+    *  `sample.list`: list of bam codes of samples surviving [intial QC](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc) 
+    *  `${SPRUCE_PROJECT}/ref/picea_newref.fa`: the [reduced reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref) 
+    * `${SPRUCE_PROJECT}/ref/picea_newref_target_regions.bed`: the [target regions for analysis](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref) 
+    * `${SPRUCE_PROJECT}/bams/intersected`: path to
+       [bams intersected](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref) by `picea_newref_target_regions.bed`
 
 * **Outputs**:
     * `${SPRUCE_PROJECT}/bams/realigned/realign_intervals/*.intervals`: intervals for realignment 
@@ -57,13 +58,13 @@ done < sample.list
 ```
 
 * **Inputs**:
-    *  `sample.list`: list of bam codes of samples surviving [intial QC]
-    *  `${SPRUCE_PROJECT}/ref/picea_newref.fa`: the [reduced reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
+    *  `sample.list`: list of bam codes of samples surviving [intial QC](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc) 
+    *  `${SPRUCE_PROJECT}/ref/picea_newref.fa`: path to the [reduced reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
     * `${SPRUCE_PROJECT}/bams/intersected`: path to [intersected bams](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref) 
     * `${SPRUCE_PROJECT}/bams/realigned/realign_intervals/*.intervals`: intervals for realignment
 
 * **Outputs**:
- * `${SPRUCE_PROJECT}/bams/realigned/*.realigned.bam`: realigned, indexed bams
+    * `${SPRUCE_PROJECT}/bams/realigned/*.realigned.bam`: realigned, indexed bams
 
 ---
 
