@@ -1,4 +1,4 @@
-## Overview
+# Overview
 
 Implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. It uses read depths from the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) and repeat annotations from the P.abies v. 1.0 [assembly](https://plantgenie.org/FTP) to:
 1) identify scaffolds with mapped reads,
@@ -8,7 +8,7 @@ Implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. 
 
 ---
 
-## Contents
+# Contents
 
 * **`scaffolds_with_coverage.sh`**: find scaffolds with ≥5 mapped reads in any sample
 * **`reduced_reference_prep.sh`**: create new reference with only scaffolds with mapped reads
@@ -18,7 +18,7 @@ Implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. 
 
 ---
 
-## Scaffold search
+# Scaffold search
 
 The *P. abies* reference genome is 12.4 Gb and has 10,253,694 scaffolds. This makes most downstream analyses extremely slow, have massive memory requirements, or just fail entirely (e.g. GATK, ANGSD). 
 
@@ -37,7 +37,7 @@ sbatch "$SCRIPTS/scaffolds_with_coverage.sh" <depth_dir> [scratch_dir] [output_f
   
 ---
 
-## Reduced reference preparation
+# Reduced reference preparation
 
 Next, we created a reduced reference comprising only the 218,545 scaffolds with mapped reads with **`reduced_reference_prep.sh`**. This script uses `samtools` to extract the scaffolds from the full reference and index the reduced reference, and creates a bed file from `picea_newref.fa.fai`. 
 
@@ -57,7 +57,7 @@ bash picard_dictionary.sh
 
 ---
 
-## Identify target regions for analysis 
+# Identify target regions for analysis 
 
 The *Picea* nuclear genome is ca. 70% transposable elements. Many of these are collapsed in the aging *P. abies* v. 1.0 reference assembly, but Illumina libraries are unlikely to offer much repeat resolution anyway. In a previous experiment, I found that sites in annotated repeats have a consistent deficit of heterozygotes, regardless of the stringency of the genotype calls/likelihoods. Because these sites are unlikely to survive to the final set of genotype calls/likelihoods, I decided to remove them at this stage to reduce the computational demand of the indel realignment. 
 
@@ -71,7 +71,7 @@ bash find_targets.sh
 
 ---
 
-## BAM intersections
+# BAM intersections
 
 Finally, we intersected the [full alignments](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/README.md) with `picea_newref_target_regions.bed` using the `-L` argument of `samtools view`. Reads mapping outside of these intervals are treated as unmapped and are not included in the output. These are the input for the next step, [indel realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment).
 
@@ -85,7 +85,7 @@ done < sample.list
 ```
 
 ---
-## Inputs & Outputs
+# Inputs & Outputs
 
 **Inputs**:
 * `${SPRUCE_PROJECT}/bams/full_alignments/`: alignments to the full P.abies reference, created [here](https://github.com/lxsllvn/spruceGBS/blob/main/01_read_alignment/)
@@ -100,7 +100,7 @@ done < sample.list
     
 ---
 
-## Dependencies
+# Dependencies
 * [samtools](https://www.htslib.org/) v. 1.19.2
 * [bedtools](https://github.com/arq5x/bedtools2) v. 2.31.0
 * [picard](https://github.com/broadinstitute/picard) v. 3.3.0
