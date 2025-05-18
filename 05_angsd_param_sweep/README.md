@@ -260,13 +260,66 @@ Finding sites that yield enough SNPs for analysis while minimizing resources dur
 
 ### Create reference subsets
 
+#### `param_exp_ref_step1.sh` usage
+
+```
+#!/bin/bash
+```
+
 ### Domain-level site discovery
+
+#### `param_exp_ref_step2.sh` usage
+
+ Allocate ca. 12 gb memory for southern and siberia; ca. 24 for northern 
+
+```
+#!/bin/bash
+# Loop through parameter sets a to j and submit each job to SLURM
+
+for i in {a..j}; do
+    sbatch "$SCRIPTS/angsd_param_exp_discovery.sh" \
+        "$i" \
+        "southern" \
+        "$SPRUCE_PROJECT/parameter_testing/parameter_exp_southern_bamlist" \
+        "$SPRUCE_PROJECT/parameter_testing/ex_ref/southern_site_discovery"
+done
+```
+
+**Inputs**
+* `$1` – The chunk index (e.g., `a`, `b`, ...)
+* `$2` – The domain or region (e.g., `southern`)
+* `$3` – Path to the BAM list file (list of input BAMs)
+* `$4` – Output directory for results
+
+**Outputs**
+* read count matrices (`*.counts.gz`) for each chunk
+* scaffold and position names (`*.pos.gz`) for each chunk
+
+** NB! ** The `*.counts.gz` matrix does not have informative row or column names. Most, but not all, ANGSD output follows this convention. Some files with positional data from ANGSD use `chr` and `pos`, like `*.pos.gz`, but others use `Chromo` and `position` and there's probably other versions as well. 
 
 ### Experimental reference preparation
 
+#### `param_exp_ref_step3.sh` usage
+
+```
+#!/bin/bash
+sbatch ${SCRIPTS}/angsd_param_exp_domain_refprep.sh \
+	"southern" \
+	"${SPRUCE_PROJECT}/parameter_testing/exp_ref/southern_site_discovery" \
+	"${SPRUCE_PROJECT}/parameter_testing/exp_ref"
+```
+
+**Inputs**
+- `$1` – the domain or region (e.g., `southern`)
+- `$2` – directory containing `*.pos.gz` and `*.counts.gz` for each chunk; created in Step 2
+- `$3` – output directory for the reference files
+
+**Output**
+* a single `*.bed`, `*sites`, `*regions`, `*.fa` and `*.fai` file for a domain
+
 # Site and population-level statistics
 
-#  MANOVA on principal coordinates 
+# MANOVA on principal coordinates 
 
 # Individual heterozygosity
 
@@ -276,15 +329,7 @@ Finding sites that yield enough SNPs for analysis while minimizing resources dur
 
 List required modules, software, or packages:
 
-* Bash (with `set -euo pipefail` recommended)
-* [samtools](https://www.htslib.org/) >= 1.9
-* R (packages: tidyverse, data.table, ...)
-* ...
+* 
 
 ---
 
-# Notes & Gotchas
-
-* Any special instructions, known issues, or tips.
-* For example: ensure you run this after the reduced reference is built.
-* ...
