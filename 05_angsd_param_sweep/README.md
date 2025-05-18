@@ -5,7 +5,17 @@ Briefly describe the purpose of this directory (one or two sentences).
 ---
 
 # Contents
-* [Objectives](#Objectives)
+
+* [Objectives](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#objectives)
+* [Filter parameter discussion](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#filter-parameters)
+* [Experimental design](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#experimental-design)
+* * [Sample selection](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#sample-selection)
+  * [Scaffold selection](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection)
+* [Parameter sweep: site and population-level statistics](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#site-and-population-level-statistics)
+* [Parameter sweep: PCA and MANOVA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates)
+* [Parameter sweep: individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity)
+
+
 ---
 
 # Scripts
