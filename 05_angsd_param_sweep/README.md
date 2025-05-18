@@ -6,10 +6,20 @@ Briefly describe the purpose of this directory (one or two sentences).
 
 # Contents
 
-* **`<script1>.sh`**: Short description of what this script does.
-* **`<script2>.R`**: Short description of what this analysis or step does.
-* **`...`**
+---
 
+# Scripts
+
+* **`param_exp_cap_mapq.py`**:
+* **`param_exp_sample_selection.R`**: Short description of what this script does.
+* **`param_exp_ref_step1.sh`**: Short description of what this analysis or step does.
+* **`param_exp_ref_step2.sh`**:
+* **`param_exp_ref_step3.sh`**:
+* **`param_exp_popstats.sh`**:
+* **`param_exp_summarize_popstats.R`**:
+* **`param_exp_PCA.sh`**:
+* **`param_exp_manova.R`**:
+* **`param_exp_indvhet.sh`**: 
 ---
 
 # Objectives
@@ -197,7 +207,52 @@ and were:
 
 Given the outcrossing mating system of *Picea*, trees from the same collection site are unlikely to deviate from Hardy-Weinberg equilibrium or show strong variation in individual heterozygosity. Genetic structure develops slowly in *Picea*, making batch effects a likely source of any apparent differentiation between stands in relatively close proximity. 
 
+### `param_exp_sample_selection.R` usage
+```R
+
+# Step 1: Filter and annotate samples
+samples <- load_and_filter_samples(path = "intersected_bam_mapping_summary.tsv", 
+                                   meta_path = "sequenced_samples_metadata.csv", 
+                                   read_quantile = 0.25, scaff_quantile = 0.25)
+
+# Step 2: Identify mixed-library pops 
+mixed_pops <- summarize_populations(samples = samples, 
+                                    min_samples = 5, 
+                                    max_prop = 0.8,
+                                    mixed_only=TRUE)
+
+# Step 3: Build population lookup
+lib_lookup <- summarize_populations(samples = samples, 
+                                    min_samples = 5, 
+                                    mixed_only = FALSE, 
+                                    keep_cols = "domain")
+
+# Step 4: Find population pairs using geodesic distance matrix
+pairs <- find_population_pairs(geo_matrix_path = "pops_geodesic_dist.txt",
+                               lib_lookup = lib_lookup)
+
+# Step 5: Build final status table
+status_table <- build_population_status(mixed_tbl = mixed_pops, 
+                                        paired_tbl = pairs,
+                                        lib_lookup = lib_lookup)
+```
+**Inputs**
+* `intersected_bam_mapping_summary.tsv`: tab-delimited summary of mapped reads and scaffold coverage from [initial QC](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc)
+* `sequenced_samples_metadata.csv`: sample metadata table; must include: `bam_code`, `pop_code`, `domain`, `region`, `library`, `latitude`, `longitude` 
+* `pops_geodesic_dist.txt`: tab-delimited distance matrix of pairwise geodesic (km) distances between populations
+
+**Outputs**
+* `angsd_parameter_exp_pops.csv`: summary table of populations used in the parameter sweep experiment 
+
 ## Scaffold selection
+
+Finding sites that yield enough SNPs for analysis while minimizing resources during the parameter sweep requires some setup. First, I took 100 Mbp from the longest scaffolds, divided this into 10 reference subsets (`param_exp_ref_step1.sh`). Then, I ran ANGSD on each reference subset to find sites with < 50% missing data, using samples from each domain separately (`param_exp_ref_step2.sh`). Lastly, I created the experimental references from these sites, resulting in an indexed fasta and the ANGSD site and region files for each domain, e.g. siberia_experiment_ref.fa, siberia_experiment_ref_regions, and siberia_experiment_ref_sites (`param_exp_ref_step3.sh`). 
+
+### Create reference subsets
+
+### Domain-level site discovery
+
+### Experimental reference preparation
 
 # Site and population-level statistics
 
