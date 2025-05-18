@@ -1,2 +1,4 @@
 # spruceGBS
-Scripts for reference guided alignment, ANGSD parameter sweeps
+Scripts for read qc, reference guided alignment, local indel realignment, ANGSD parameter sweeps.
+
+Work in progress. 
