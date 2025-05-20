@@ -200,6 +200,8 @@ This down-weights moderately noisy alignments and eliminate the worst ones. Choo
 
 Filtering on overall site call-rate can hide, or even worsen, systematic missingness that tracks sequencing library rather than biology. When one library routinely fails to call certain loci (due to GBS fragment size-selection, DNA quality, GC/AT bias, or simply lower depth), those sites carry a “library fingerprint” of missing data. Downstream tools (PCA, ADMIXTURE) that impute or mean-replace missing genotypes will then recover batch effects instead of true population structure.
 
+---
+
 # Experimental design
 
 ## Sample selection
@@ -314,7 +316,7 @@ done
 * `${DOMAIN}_target_scaff_pt_a{a..j}.counts.gz` - read count matrices for each chunk 
 * `${DOMAIN}_target_scaff_pt_a{a..j}.pos.gz` - scaffold and position names for each chunk
 
-** NB! ** The `.counts.gz` matrix does not have informative row or column names. Most, but not all, ANGSD output follows this convention. Some files with positional data from ANGSD use `chr` and `pos`, like `.pos.gz`, but others use `Chromo` and `position` and there's probably other versions as well. 
+**NB!** The `*.counts.gz` matrix does not have informative row or column names. Most, but not all, ANGSD output follows this convention. Some files with positional data from ANGSD use `chr` and `pos`, like `.pos.gz`, but others use `Chromo` and `position` and there's probably other versions as well. 
 
 ### Experimental reference preparation
 
@@ -343,9 +345,95 @@ sbatch ${SCRIPTS}/angsd_param_exp_domain_refprep.sh \
   * `${DOMAIN}_experiment_ref_sites`
   * `${DOMAIN}_experiment_ref_regions`
 
+---
+  
 # Site and population-level statistics
 
+
+## **`param_exp_popstats.sh`** usage
+
+```bash
+#!/bin/bash
+sbatch $SCRIPTS/angsd_param_exp_sweep.sh \
+"$SPRUCE_PROJECT/parameter_testing/exp_ref/southern_experiment_ref.fa" \
+southern \
+parameter_exp_southern_bamlist \
+"${SPRUCE_PROJECT}/parameter_testing/exp_ref/southern_experiment_ref_regions" \
+"${SPRUCE_PROJECT}/parameter_testing/exp_ref/southern_experiment_ref_sites" \
+southern_results
+```
+
+**Inputs**
+* `$1` – path to the experimental reference genome for a domain
+* `$2` – domain name (e.g., southern)
+* `$3` – list of BAM files in the domain (e.g., parameter_exp_southern_bamlist)
+* `$4` – region file for the experimental reference
+* `$5` – sites file for the experimental reference
+* `$6` – base output directory name 
+
+Per-population BAM lists should be stored in "${DOMAIN}_populations/*.txt"
+
+**Outputs** 
+```bash
+├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/  
+├── ${POP}/${POP}/            # one folder per population 
+│   ├── gl.arg                # run arguements
+│   ├── gl.beagle.gz          # genotype likelihoods, beagle format
+│   ├── gl.hwe.gz             # per-site inbreeding coefficients 
+│   ├── gl.mafs.gz            # minor allele frequencies 
+│   ├── gl.safs.gz            # binary site allele frequency likelihood
+│   ├── gl.safs.idx           # binary postion index
+│   ├── gl.safs.pos.gz        # binary scaffold names and positions
+│   ├── gl.sfs                # site frequency spectrum
+│   ├── saf2theta.thetas.gz   # binary per-site Θ estimates
+│   ├── saf2theta.thetas.idx  # binary index file
+│   ├── thetas.persite.txt    # neutrality test statistics π and Θ estimators
+│   ├── thetas.summary.pestPG # per-scaffold summary π and Θ estimators
+└── domain_sfs.counts.gz      # read count matrix, nrow sites X ncol samples
+└── domain_sfs.pos.gz         # scaffold names and postions
+└── domain_sfs.mafs.gz        # domain-level minor allele frequences
+└── domain_sfs.beagle.gz      # domain-level genotype likelihoods in 
+                              # beagle format, used for PCAngsd later
+```
+
+Within the output directory, there will be a folder for each parameter combination, which in turn has a folder for each population in `${DOMAIN}_populations/*.txt`.
+
+Results are collected by `param_exp_popstats.R`.
+
+## **`param_exp_popstats.R`** usage
+
+```bash
+Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
+    "${SPRUCE_PROJECT}/parameter_testing/southern_results" \
+    "${SPRUCE_PROJECT}/parameter_testing/sequenced_samples_metadata.csv" \
+    "${SPRUCE_PROJECT}/parameter_testing/parameter_exp_southern_bamlist" \
+    "southern"
+```
+
+**Inputs**
+* `$1` – path to top-level results folder 
+* `$2` – sample metadata table; must include: `bam_code`, `pop_code`, `domain`, `region`, `library`, `latitude`, `longitude`
+* `$3` – list of BAM files in the domain (e.g., parameter_exp_southern_bamlist)
+* `$4` – domain name (e.g., southern)
+
+
+**Outputs**
+```bash
+├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/
+│   ├── ${DOMAIN}_${PARAM_ID}_ct4.beagle.gz  # beagle genotype likelihoods for sites with library call rate > 40%
+│   ├── ${DOMAIN}_${PARAM_ID}_ct5.beagle.gz  # library call rate > 50%
+│   ├── ${DOMAIN}_${PARAM_ID}_ct6.beagle.gz  # library call rate > 60%
+└── $DOMAIN_angsd_param_summaries.csv        # collected results for all loci
+└── $DOMAIN_maf05_angsd_param_summaries.csv  # collected results for domain-level MAF > 0.05 loci
+```
+
+${DOMAIN}_${PARAM_ID}_ct4.beagle.gz are the input files for PCAngsd in the next step. 
+
+---
+
 # MANOVA on principal coordinates 
+
+---
 
 # Individual heterozygosity
 
