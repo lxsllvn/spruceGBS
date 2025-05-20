@@ -349,6 +349,12 @@ sbatch ${SCRIPTS}/angsd_param_exp_domain_refprep.sh \
   
 # Site and population-level statistics
 
+Uses the [experimental samples](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#sample-selection) and [experimental reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection)
+
+Calculates domain-level DP matrix and MAFs
+Calculates H<sub>e</sub>, H<sub>o</sub>, F, π, Θ<sub>w</sub>, and MAF by locus per population. 
+
+Call threshold and MAF filters are implemented in the R script, which uses the domain-level read depth matrix and MAFs. R script also prepares the data for the PCA and MANOVA.
 
 ## **`param_exp_popstats.sh`** usage
 
@@ -427,7 +433,7 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 └── $DOMAIN_maf05_angsd_param_summaries.csv  # collected results for domain-level MAF > 0.05 loci
 ```
 
-${DOMAIN}_${PARAM_ID}_ct4.beagle.gz are the input files for PCAngsd in the next step. 
+`${DOMAIN}_${PARAM_ID}_ct4.beagle.gz` are the input files for PCAngsd in the next step. 
 
 ---
 
