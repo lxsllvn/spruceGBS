@@ -332,16 +332,16 @@ sbatch ${SCRIPTS}/angsd_param_exp_domain_refprep.sh \
 
 **Inputs**
 - `$1` – the domain or region (e.g., `southern`)
-- `$2` – directory containing `${DOMAIN}_target_scaff_pt_a{a..j}.counts.gz` and `${DOMAIN}_target_scaff_pt_a{a..j}.pos.gz` ` for each chunk; created by `param_exp_ref_step2.sh`
+- `$2` – directory containing `${DOMAIN}_target_scaff_pt_a{a..j}.counts.gz` and `${DOMAIN}_target_scaff_pt_a{a..j}.pos.gz` for each chunk; created by `param_exp_ref_step2.sh`
 - `$3` – output directory for the reference files
 
 **Output**
 * An experimental reference comprising sites with < 50% missing data and associated files per domain:
- * `${DOMAIN}_experiment_ref.fa`
- * `${DOMAIN}_experiment_ref.fa.fai`
- * `${DOMAIN}_experiment_ref.bed`
- * `${DOMAIN}_experiment_ref_sites`
- * `${DOMAIN}_experiment_ref_regions`
+  * `${DOMAIN}_experiment_ref.fa`
+  * `${DOMAIN}_experiment_ref.fa.fai`
+  * `${DOMAIN}_experiment_ref.bed`
+  * `${DOMAIN}_experiment_ref_sites`
+  * `${DOMAIN}_experiment_ref_regions`
 
 # Site and population-level statistics
 
