@@ -288,7 +288,7 @@ sbatch param_exp_ref_step1.sh \
 
 ### Domain-level site discovery
 
-For each domain, I then calculated the read count matrix of each reference subset using the most lenient set of filter combinations (-baq 0 -C 0 -minQ 20 -minMapQ 20) and required a site to be present in at least half the samples.
+For each domain, I then calculated the read count matrix of each reference subset using the most lenient set of filter combinations (`-baq 0 -C 0 -minQ 20 -minMapQ 20`) and required a site to be present in at least half the samples.
 
 #### `param_exp_ref_step2.sh` usage
 
@@ -364,11 +364,11 @@ southern_results
 ```
 
 **Inputs**
-* `$1` – path to the experimental reference genome for a domain
+* `$1` – path to the [experimental reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection) for a domain
 * `$2` – domain name (e.g., southern)
 * `$3` – list of BAM files in the domain (e.g., parameter_exp_southern_bamlist)
-* `$4` – region file for the experimental reference
-* `$5` – sites file for the experimental reference
+* `$4` – region file for the [experimental reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection)
+* `$5` – sites file for the [experimental reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection) 
 * `$6` – base output directory name 
 
 Per-population BAM lists should be stored in "${DOMAIN}_populations/*.txt"
@@ -396,9 +396,9 @@ Per-population BAM lists should be stored in "${DOMAIN}_populations/*.txt"
                               # beagle format, used for PCAngsd later
 ```
 
-Within the output directory, there will be a folder for each parameter combination, which in turn has a folder for each population in `${DOMAIN}_populations/*.txt`.
+Results from each parameter combination are written to `${DOMAIN}_${PARAM_ID}`. The `${PARAM_ID}` name specifies the `-baq` model, `-C` coefficent, `-minQ` and `-minMapQ` used in the run; for example `baq0_C0_q20_mq20`, `baq0_C0_q20_mq30`, `baq0_C0_q20_mq40`, ... . Domain-level results live in this folder and population-level results each live in their own subdirectory. 
 
-Results are collected by `param_exp_popstats.R`.
+Once `param_exp_popstats.sh` is completed, `param_exp_popstats.R` implements the library call-rate filter, creates genotype likelihood files for each call rate for later use, and summarizes the results in two files: `$DOMAIN_angsd_param_summaries.csv` for all loci and `$DOMAIN_maf05_angsd_param_summaries.csv` for loci with a domain-level MAF > 0.5. 
 
 ## **`param_exp_popstats.R`** usage
 
