@@ -9,18 +9,15 @@
 library(dplyr)
 library(readr)
 library(stringr)
-library(broom)
 library(ggplot2)
 library(lme4)
 library(MuMIn)
 library(emmeans)
-library(broom.mixed)
 library(purrr)
 library(ggridges)
 library(patchwork)
 library(ggpubr)
 library(RColorBrewer)
-library(forcats)
 library(tidyr)
 
 # ============================
@@ -32,6 +29,19 @@ VALUE_STATS   <- c("pi", "theta_W", "MAF", "Hexp", "Hobs", "F", "absF", "tajima_
 # ============================
 # 1. Import/Utility Functions
 # ============================
+`
+#' Null coalescing operator
+#'
+#' Returns the left-hand side if it is not \code{NULL}, otherwise returns the right-hand side.
+#'
+#' @param a First value to test for \code{NULL}.
+#' @param b Value to return if \code{a} is \code{NULL}.
+#' @return \code{a} if not \code{NULL}, otherwise \code{b}.
+#' @examples
+#' 1 %||% 2      # returns 1
+#' NULL %||% 5   # returns 5
+#' @export
+`%||%` <- function(a, b) if (!is.null(a)) a else b
 
 #' Import and parse summary CSV file.
 #'
@@ -349,12 +359,8 @@ plot_stat_distributions <- function(
     ncol          = NULL,    
     ...
 ) {
-  # Filter data: raw vs summarized
-  if (value_col == "value") {
-    df <- shape_and_filter(data, maf_threshold) %>% filter(statistic == stat_name)
-  } else {
     df <- data %>% filter(statistic == stat_name)
-  }
+
   # Compute x-limits if requested
   xlims <- NULL
   if (filter_by_quantiles) {
