@@ -987,4 +987,79 @@ plot_RMSE <- function(pop_summary,
   }
 }
 
+# # --- Raincloud plot of two-parameter interactions ---
+
+#' Create a half-eye + boxplot "raincloud" for a given statistic split by two filter parameters.
+#'
+#' @param data Long-format tibble or summarized tibble with 'statistic', 'value', and parameter columns.
+#' @param stat_name Character; name of the statistic to filter by.
+#' @param param1 Character; first parameter column for the half-eye.
+#' @param param2 Character; second parameter column for facetting.
+#' @param maf_threshold Numeric; MAF threshold (only applied if raw 'value').
+#' @param output_dir Optional path to save the plot; if NULL, prints to device.
+#' @param output_file Optional filename for saving; defaults to '<stat_name>_<param1>_<param2>_raincloud.png'.
+#' @return Invisibly returns the ggplot object after printing or saving.
+#' @examples
+#' raincloud_two_param(df_long, "F", "baq", "minQ")
+#' raincloud_two_param(pop_summary, "absF", "baq", "minQ", maf_threshold = NA)
+raincloud_two_param <- function(
+  data,
+  stat_name,
+  param1,
+  param2,
+  maf_threshold = 0.05,
+  output_dir    = NULL,
+  output_file   = NULL
+) {
+  if (!is.na(maf_threshold)) {
+    df <- shape_and_filter(data, maf_threshold) %>% 
+    filter(statistic == stat_name)
+  } else {
+    df <- data %>% filter(statistic == stat_name)
+  }
+  # Build plot
+  p <- ggplot(df, aes(
+      x     = factor(.data[[param1]]),
+      y     = value,
+      fill  = factor(.data[[param1]]),
+      group = .data[[param1]]
+    )) +
+    ggdist::stat_halfeye(
+      adjust        = 0.5,
+      width         = 0.6,
+      .width        = 0,
+      justification = -0.3,
+      point_colour  = NA
+    ) +
+    geom_violin(
+      width = 0.6,
+      alpha = 0.5,
+      trim  = FALSE
+    ) +
+    facet_wrap(as.formula(paste("~", param2)), scales = "free_y") +
+    theme_minimal() +
+    labs(
+      title = paste("Effect of", param1, "and", param2, "on", stat_name),
+      x     = param1,
+      y     = stat_name
+    ) +
+    theme(
+      legend.position   = "none",
+      strip.background  = element_blank(),
+      strip.text        = element_text(size = 12)
+    )
+
+  # Save or print
+  if (!is.null(output_dir)) {
+    if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+    if (is.null(output_file)) {
+      output_file <- paste0(stat_name, "_", param1, "_", param2, "_raincloud.png")
+    }
+    save_path <- file.path(output_dir, output_file)
+    ggsave(save_path, plot = p, width = 10, height = 6, dpi = 300, bg = "white")
+    message("Saved plot to ", save_path)
+  } else {
+    print(p)
+  }
+}
 # --- End of Script ---
