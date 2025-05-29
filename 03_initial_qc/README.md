@@ -1,15 +1,15 @@
-## Overview
+# Overview
 
 Implements **Step 3: initial sample quality control** of the spruceGBS pipeline. This is a super-basic filter pass to remove samples with the lowest depth and/or breadth of coverage.  
 
 ---
 
-## Contents
+# Contents
 
 * **`bam_mapping_summary.sh`**: finds the number of mapped scaffolds and the total number of mapped reads per sample and returns a summary dataframe
 
 ---
-## Sequencing depth and breadth per sample
+# Sequencing depth and breadth per sample
 
 While genotype likelihoods are useful for low-depth sequences, variation in depth and/or coverage among samples can bias estimates of diversity and structure.
 
@@ -24,7 +24,7 @@ sbatch "$SCRIPTS/bam_mapping_summary.sh" \
     "$SPRUCE_PROJECT/bams/intersected" # path to bams
 ```
 
-## Visualization and removal
+# Visualization and removal
 
 Samples had a median of 515,455 mapped reads (IQR = 762,618) to 7,983 (IQR = 2,724) scaffolds. Samples below the 10th percentile in either metrics (indicated by black, vertical lines) were removed (n = 208).
 
@@ -87,7 +87,7 @@ write.table(df, "initial_qc_failed_samples.txt",
 
 ---
 
-## Inputs & Outputs
+# Inputs & Outputs
 
 * **Inputs**:
   * `$SPRUCE_PROJECT/bams/intersected`: BAMs after [intersection with target regions](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref).
@@ -98,7 +98,7 @@ write.table(df, "initial_qc_failed_samples.txt",
   
 ---
 
-## Dependencies
+# Dependencies
 
 List required modules, software, or packages:
 
