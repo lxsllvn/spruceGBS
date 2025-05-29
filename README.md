@@ -8,3 +8,4 @@ Work in progress.
 * [Step 3: initial sample quality control](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc)
 * [Step 4: indel realignment](https://github.com/lxsllvn/spruceGBS/tree/main/04_realignment)
 * [Step 5: ANGSD parameter sweep](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep)
+* [Step 6: Analyze parameter sweep](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results)
