@@ -1,17 +1,17 @@
-## Overview
+# Overview
 
 Implements **Step 4: indel realignment** of the spruceGBS pipeline using GATK 3.7.
 
 ---
 
-## Contents
+# Contents
 
 * **`GATK_indeltargetcreator.sh`**: Runs GATK RealignerTargetCreator to identify intervals likely to contain misaligned indels. Outputs .intervals files.
 * **`GATK_indelrealigner.sh`**: Uses GATK IndelRealigner to locally realign reads across those intervals and produces new indexed bams.
   
 ---
 
-## Important notes
+# Important notes
 
 * GATK v. ≥ 4 no longer includes IndelTargetCreator and IndelRealigner. These scripts require GATK v. 3 and were tested with GATK v. 3.7-0-gcfedb67
 * GATK v. 3 requires Java 8 and was tested with AdoptOpenJDK 8u392
@@ -19,7 +19,7 @@ Implements **Step 4: indel realignment** of the spruceGBS pipeline using GATK 3
 
 ---
 
-## Indel realignment
+# Indel realignment
 
 By default (O=6, E=1, B=4), BWA-MEM favors mismatches to single base-pair indels, and by convention, reports ungapped alignments over 2 bp indels. These unresolved small indels can result in false positive SNPs, and from previous experience with spruce, realignment reduces the number of SNPs with Ho >> 0.5 and high MAF but no observed heterozygotes. 
 
@@ -68,7 +68,7 @@ done < sample.list
 
 ---
 
-## Dependencies
+# Dependencies
 
 * [Java 8](https://github.com/adoptium/temurin8-binaries/releases); tested with jdk8u392-b08
 * [GATK v. 3.7-0-gcfedb67](https://console.cloud.google.com/storage/browser/gatk-software/package-archive/gatk;tab=objects?pli=1&prefix=&forceOnObjectsSortingFiltering=false). 
