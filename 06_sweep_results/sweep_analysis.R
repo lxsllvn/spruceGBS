@@ -1,6 +1,7 @@
 #' ---
-#' Title: Project R Utility Functions
-#' Description: Import, summarize, model, and plot summary stats for genomics pipeline.
+#' Title: ANGSD parameter sweep analysis functions
+#' Description: Import, summarize, model, and plot results of the
+#' individual heterozygosity, PCA/MANOVA, and site and population-level statistics experiments.
 #' ---
 
 # ============================
@@ -88,6 +89,46 @@ import_indvhet <- function(filepath) {
            minMapQ= factor(mq),
            call_thresh = factor(ct),
            clipC  = factor(C))
+  return(df)
+}
+
+#' Read marginal means table from CSV and flexibly type columns
+#'
+#' Reads a CSV of estimated marginal means (EMMs), coercing all columns to numeric
+#' except for \code{statistic} and \code{formula}, which are always character.
+#' Suppresses parsing warnings (e.g., from blank/incomplete lines) and filters out rows
+#' with NA in \code{emmean}.
+#'
+#' @param path Path to the CSV file.
+#'
+#' @return A tibble where all columns are numeric except \code{statistic} and \code{formula}, which are character.
+#'
+#' @details
+#' All columns except \code{statistic} and \code{formula} are coerced to numeric. 
+#' If you have additional non-numeric columns, they will be read as numeric (becoming NA if not coercible).
+#' Suppresses parsing warnings by default; remove \code{suppressWarnings()} if you want to see them.
+#'
+#' @examples
+#' df <- read_emms("my_emms_table.csv")
+#'
+#' @export
+read_emms <- function(path) {
+  # Get column names from the first row
+  col_names <- names(readr::read_csv(path, n_max = 0, show_col_types = FALSE))
+  # Prepare col_types: everything is col_double() except for statistic and formula
+  col_types <- rep(list(readr::col_double()), length(col_names))
+  names(col_types) <- col_names
+  col_types[["statistic"]] <- readr::col_character()
+  col_types[["formula"]]   <- readr::col_character()
+  
+  df <- suppressWarnings(readr::read_csv(
+    path,
+    col_types = do.call(readr::cols, col_types),
+    show_col_types = FALSE
+  ))
+  if ("emmean" %in% colnames(df)) {
+    df <- dplyr::filter(df, !is.na(.data$emmean))
+  }
   return(df)
 }
 
@@ -652,6 +693,114 @@ plot_pcangsd_sweep <- function(domains,
         }
       }
     }
+  }
+}
+
+# --- Plot of marginal means from mixed-effect models---
+
+#' Plot marginal means with automated y-axis from formula
+#'
+#' Reads y-axis variables from the formula column, groups and deduplicates appropriately,
+#' and plots the marginal means for a given statistic.
+#' Optionally saves the plot to a file.
+#'
+#' @param df Data frame with marginal means (must include columns: emmean, formula, statistic)
+#' @param target_stat Statistic to plot (e.g. "pi")
+#' @param x_var X-axis variable (default "emmean")
+#' @param lower Name for lower CI column (optional, for error bars)
+#' @param upper Name for upper CI column (optional, for error bars)
+#' @param output_file Output file name (optional, e.g. "pi_marginal_means.png")
+#' @param output_dir Directory to save plot (optional, e.g. "results/plots")
+#' @param width Plot width for saving (default 8)
+#' @param height Plot height for saving (default 6)
+#' @param dpi Plot resolution for saving (default 300)
+#' @param ... Other args to ggplot2::geom_point()
+#'
+#' @export
+plot_marginal_means <- function(
+    df,
+    target_stat,
+    x_var = "emmean",
+    lower = "asymp.LCL",
+    upper = "asymp.UCL",
+    output_file = NULL,
+    output_dir = NULL,
+    width = 8,
+    height = 6,
+    dpi = 300,
+    ...
+) {
+  # Helper to extract grouping vars from formula column
+  extract_yvars_from_formula <- function(formula_str) {
+    rhs <- sub(".*~", "", formula_str)
+    rhs <- gsub("\\s+", "", rhs)
+    rhs <- gsub("\\([^)]*\\)", "", rhs)  # remove (1|something)
+    vars <- unlist(strsplit(rhs, "[+:]"))
+    vars <- vars[vars != ""]
+    unique(vars)
+  }
+  
+  # 1. Filter to the right statistic
+  df_stat <- df %>%
+    dplyr::filter(statistic == target_stat, !is.na(.data[[x_var]]))
+  
+  # 2. Get y_vars from formula
+  formula_str <- unique(df_stat$formula)[1]
+  y_vars <- extract_yvars_from_formula(formula_str)
+  
+  # 3. Deduplicate if necessary
+  df_stat <- df_stat %>%
+    dplyr::distinct(dplyr::across(all_of(y_vars)), .keep_all = TRUE)
+  
+  # 4. Create y column (for interaction if multiple)
+  y_is_interaction <- length(y_vars) > 1
+  df_stat <- df_stat %>%
+    dplyr::mutate(
+      y = if (y_is_interaction) interaction(!!!rlang::syms(y_vars), sep = ":")
+      else .data[[y_vars]]
+    )
+  
+  # 5. Ensure numeric x and error bars (if needed)
+  df_stat[[x_var]] <- as.numeric(df_stat[[x_var]])
+  if (lower %in% names(df_stat) && upper %in% names(df_stat)) {
+    df_stat[[lower]] <- as.numeric(df_stat[[lower]])
+    df_stat[[upper]] <- as.numeric(df_stat[[upper]])
+  }
+  
+  # 6. Plot!
+  p <- ggplot2::ggplot(df_stat, ggplot2::aes(x = .data[[x_var]], y = y)) +
+    ggplot2::geom_point(...) +
+    ggplot2::labs(
+      x = x_var,
+      y = if (y_is_interaction) paste(y_vars, collapse = ":") else y_vars
+    )
+  
+  # Add error bars if present
+  if (lower %in% names(df_stat) && upper %in% names(df_stat)) {
+    p <- p + ggplot2::geom_errorbar(
+      ggplot2::aes(xmin = .data[[lower]], xmax = .data[[upper]]), width = 0.15)
+  }
+  
+  # Clean up x axis a bit
+  p <- p +
+    ggplot2::scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) +
+    ggplot2::theme_minimal()
+  
+  # 7. Save or print
+  if (!is.null(output_file)) {
+    save_path <- output_file
+    if (!is.null(output_dir)) {
+      if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+      save_path <- file.path(output_dir, output_file)
+    }
+    ggplot2::ggsave(
+      filename = save_path, plot = p, width = width, height = height, dpi = dpi, bg = "white"
+    )
+    message("Plot saved to: ", save_path)
+    invisible(save_path)
+  } else {
+    print(p)
+    invisible(p)
   }
 }
 
