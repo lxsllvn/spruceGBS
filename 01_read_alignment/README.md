@@ -1,10 +1,10 @@
-## Overview
+# Overview
 
 Implements **Step 1: initial pre-processing and alignment** of the spruceGBS pipeline.  
 
 ---
 
-## Contents
+# Contents
 
 * **`read_qc.sh`**  
   - Trims adapters and low-quality bases (with `--cut_front`, `--cut_right`), removes poly-X tails (`-x`) and low-entropy reads (`-y`) using `fastp`.  
@@ -16,7 +16,7 @@ Implements **Step 1: initial pre-processing and alignment** of the spruceGBS pip
 
 ---
 
-## Pre-processing and quality control
+# Pre-processing and quality control
 
 Reads were demultiplexed using the process_radtags module of `Stacks v.2.0`. Adapter sequences and low-quality bases were removed with `fastp`, using **`read_qc.sh`**.
 
@@ -35,7 +35,7 @@ done < sample.list
 
 ---
 
-## Alignment
+# Alignment
 
 We mapped surviving paired-end reads to the *P. abies* reference genome with BWA-MEM v. 0.7.19, as implemented in **`bwa.sh`**. This script produces sorted, indexed BAMs. This script also calculates per-sample read depths, which are used to identify scaffolds to keep in the [reduced reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref).
 
@@ -50,7 +50,7 @@ done < sample.list
 
 ---
 
-## Inputs & Outputs
+# Inputs & Outputs
 
 * **Inputs**:
   * `${SPRUCE_PROJECT}/ref/Pabies1.0-genome.fa`: the [reference genome](https://plantgenie.org/FTP) and BWA index files
@@ -63,7 +63,7 @@ done < sample.list
 
 ---
 
-## Dependencies
+# Dependencies
 * [stacks](https://catchenlab.life.illinois.edu/stacks/) v. 2.0
 * [fastp](https://github.com/OpenGene/fastp) v. 0.23.4
 * [bwa](https://github.com/lh3/bwa) v. 0.7.18
