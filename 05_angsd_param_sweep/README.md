@@ -438,7 +438,7 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 
 # RDA on principal components
 
-RDA on principal components sounds a bit ridiculous, but here, I actually am asking "how much do my explanatory variables explain the structure I see **in the principal components**?" and not "how much do they explain genetic structure? I initially tried using MANOVA on PCs, but the results were difficult/nonsense without handling the confounded variation between "library" and "region".
+RDA on principal components sounds a bit ridiculous, but here, I actually am asking "how much do my explanatory variables explain the structure I see ***in the principal components***?" and not "how much do they explain genetic structure?" I initially tried using MANOVA on PCs, but the results were difficult/nonsense without handling the confounded variation between "library" and "region".
 
 
 ---
