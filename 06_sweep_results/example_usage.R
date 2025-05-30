@@ -45,6 +45,40 @@ for (dom in domains) {
   }
 }
 
+
+# -------------------------------------------------------
+# RDA variance partitioning: visualize unique and proportional effects
+# -------------------------------------------------------
+
+domains   <- c("northern", "southern", "siberia")
+plot_types <- c("core", "extended")
+fill_vars <- c("region_unique", "library_unique", "region_prop")
+
+for (dom in domains) {
+  # Run RDA/variance partitioning for all parameter combos in this domain
+  results <- pcangsd_rda(
+    dom,
+    output_dir = "rda"         # save results table (optional)
+  )
+  
+  # Calculate region_prop: the proportion of explained variance unique to region
+  results$region_prop <- with(results, region_unique / (region_unique + library_unique))
+  
+  # Make heatmaps for each combination of plot_type and fill variable
+  for (ptype in plot_types) {
+    for (fill in fill_vars) {
+      plot_rda_heatmap(
+        results,
+        fill_var    = fill,
+        plot_type   = ptype,
+        output_dir  = "rda",
+        output_file = paste0(dom, "_", ptype, "_", fill, ".png")
+      )
+    }
+  }
+}
+
+
 # -------------------------------------------------------
 # PCA biplots of genetic structure, colored by library and region
 # -------------------------------------------------------
