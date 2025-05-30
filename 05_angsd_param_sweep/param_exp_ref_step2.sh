@@ -33,7 +33,7 @@ OUTPUT="${OUTDIR}/${DOMAIN}_target_scaff_pt_a${INDEX}"
 # ------------------------
 
 n=$(wc -l < "$BAMLIST") #Count number of individuals in bam list
-MININD=$(((${n} * 1/2))) #Minimum number of individuals; 1/2 for 50% etc.
+MININD=$(awk -v n="$n" 'BEGIN { printf("%d", n * 0.4 + 0.5) }') #Minimum number of individuals; n * 0.5 for 50% etc.
 DEFAULT_FILTERS="-remove_bads 1 -uniqueOnly 1 -only_proper_pairs 1 -setMinDepthInd 3 -minInd $MININD"
 
 # Calculate domain-wide read count matrix 
