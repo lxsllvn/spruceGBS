@@ -6,7 +6,7 @@ Implements **Step 6: Analyze parameter sweep of the spruceGBS pipeline**. Select
 
 # Contents
 
-* **`analysis_functions.R`**: Parse, summarize, model, and plot results of the [individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity), [PCA/MANOVA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates), and [site and population-level statistics](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#site-and-population-level-statistics) experiments.
+* **`analysis_functions.R`**: Parse, summarize, model, and plot results of the [individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity), [PCA/RDA]([https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#rda-on-principal-components), and [site and population-level statistics](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#site-and-population-level-statistics) experiments.
 * **`example_usage.R`**: Workflow used to create the plots summarized here. 
 
 ---
@@ -52,6 +52,9 @@ Implements **Step 6: Analyze parameter sweep of the spruceGBS pipeline**. Select
 - **`write_models(result_list, base_name, outdir)`**  
     Write model results (formulas, variance components, marginal means) to CSV files.
 
+- **`pcangsd_rda(domain, cov_dir_suffix , n_pc, output_dir)`**  
+    Partition variance in principal components explained by region or library for all parameter combos.
+  
 ### IV. Plotting Functions
 
 - **`plot_stat_distributions(data, stat_name, value_col, ..., ncol)`**  
@@ -67,7 +70,7 @@ Implements **Step 6: Analyze parameter sweep of the spruceGBS pipeline**. Select
     Batch PCA biplots for each domain/parameter combination.
     
 - **`plot_popvar(df, statistic, fill_var, output_dir, output_file, ...)`**  
-    Heatmaps of within-region, among-population variation in statistics.
+    Heatmaps of within-region, among-population variation in pogen statistics.
     
 - **`plot_pop_heatmaps(pop_summary, statistic, fill_var, output_file, output_dir, ...)`**  
     Heatmaps of statistic means per population, faceted by filter parameters.
@@ -78,6 +81,8 @@ Implements **Step 6: Analyze parameter sweep of the spruceGBS pipeline**. Select
 - **`plot_marginal_means(df, target_stat, x_var, ..., output_file, output_dir)`**  
     Scatterplots of estimated marginal means for a statistic, with error bars and auto-extraction of grouping variables.
 
+- **`plot_rda_heatmap(df, fill_type, plot_type, output_dir, output_file)`**
+    Heatmaps of variance components from RDA by parameter setting
 ---
 
 # Usage
