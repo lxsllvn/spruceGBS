@@ -7,7 +7,7 @@ IFS=$'\n\t'
 # Reduced Reference Creation for ANGSD Parameter Experiments
 # -----------------------------------------------------
 # Usage:
-#   ./make_reduced_reference.sh OUTDIR REF_BED CONTAM_BED REF_FASTA
+#   ./param_exp_ref_step1.sh OUTDIR REF_BED CONTAM_BED REF_FASTA
 # Arguments:
 #   OUTDIR     - Output directory for all results
 #   REF_BED    - BED file with non-contaminant target regions
