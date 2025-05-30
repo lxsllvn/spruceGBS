@@ -27,7 +27,6 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 * **`param_exp_popstats.sh`**:
 * **`param_exp_summarize_popstats.R`**:
 * **`param_exp_PCA.sh`**:
-* **`param_exp_manova.R`**:
 * **`param_exp_indvhet.sh`**: 
 ---
 
@@ -41,8 +40,8 @@ Our objective was to assess the influence of filter parameter settings across th
     - Evaluated the impact of parameter choices on H<sub>e</sub>, H<sub>o</sub>, F, π, Θ<sub>w</sub>, and MAF 
     - Identified settings that led to biologically implausible estimates, if any.
       
-2. **PCA and MANOVA on principal coordinates:**
-    - Tested the variance explained by sequencing library and geographic region.
+2. **PCA and RDA on principal coordinates:**
+    - RDA on principal components to partition variance explained by sequencing library and geographic region.
       
 3. **Individual heterozygosity estimates:**
     - Assessed parameter effects on individual variation in mixed-library populations.
@@ -437,7 +436,10 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 
 ---
 
-# MANOVA on principal coordinates 
+# RDA on principal components
+
+RDA on principal components sounds a bit ridiculous, but here, I actually am asking "how much do my explanatory variables explain the structure I see **in the principal components**?" and not "how much do they explain genetic structure? I initially tried using MANOVA on PCs, but the results were difficult/nonsense without handling the confounded variation between "library" and "region".
+
 
 ---
 
