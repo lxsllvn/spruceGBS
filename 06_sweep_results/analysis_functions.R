@@ -1,7 +1,9 @@
 #' ---
 #' Title: ANGSD parameter sweep analysis functions
-#' Description: Import, summarize, model, and plot results of the
-#' individual heterozygosity, PCA/MANOVA, and site and population-level statistics experiments.
+#' Description: Import, summarize, model, and plot
+#' results of the individual heterozygosity, 
+#' PCA/MANOVA, RDA on PCs, and site and 
+#' population-level statistics experiments.
 #' ---
 
 # ============================
@@ -20,6 +22,7 @@ library(patchwork)
 library(ggpubr)
 library(RColorBrewer)
 library(tidyr)
+library(vegan)
 
 # ============================
 #      Global Constants
@@ -366,6 +369,76 @@ write_models <- function(
     marginal_means = all_margmeans
   ))
 }
+
+#' Run variance partitioning (varpart) or RDA for all parameter combos in a PCangsd covariance folder.
+#'
+#' @param domain         Character. E.g. "northern"
+#' @param cov_dir_suffix Suffix for covariance directory (default: "collected_covs")
+#' @param n_pc           Number of PCs to use (default: 2)
+#' @param output_dir     Optional directory to save output CSV
+#' @return               Data frame of results
+#' @export
+pcangsd_rda <- function(domain,
+                        cov_dir_suffix = "collected_covs",
+                        n_pc           = 2,
+                        output_dir     = NULL) {
+  
+  library(dplyr); library(stringr); library(tibble); library(vegan)
+  
+  # Get sample metadata
+  indv_info <- get.info(paste0("parameter_exp_", domain, "_bamlist.txt"),
+                        "sequenced_samples_metadata.csv")
+  # List all covariance files
+  cov_folder <- file.path(paste0(domain, "_", cov_dir_suffix))
+  files <- list.files(path = cov_folder, pattern = "\\.Pcangsd\\.cov$", full.names = TRUE)
+  if (length(files) == 0) stop("No covariance files found.")
+  
+  results <- list()
+  for (f in files) {
+    # Parse parameters from filename
+    param_id <- sub("\\.Pcangsd\\.cov$", "", basename(f))
+    params <- tibble(
+      param_id = param_id,
+      baq      = str_extract(param_id, "(?<=_baq)\\d+"),
+      C        = str_extract(param_id, "(?<=_C)\\d+"),
+      minQ     = str_extract(param_id, "(?<=_q)\\d+"),
+      minMapQ  = str_extract(param_id, "(?<=_mq)\\d+"),
+      ct       = str_extract(param_id, "(?<=_ct)\\d+")
+    )
+    
+    # Read covariance, get eigenvectors (PCs)
+    mat <- as.matrix(read.table(f, header = FALSE))
+    eig <- eigen(mat)
+    pc_names <- paste0("PC", seq_len(n_pc))
+    df_ev <- indv_info %>%
+      mutate(!!!setNames(as.data.frame(eig$vectors[, seq_len(n_pc)]), pc_names)) %>%
+      filter(complete.cases(.))
+    Y <- as.matrix(df_ev[, pc_names])
+    
+    # Run variance partitioning (varpart)
+    vp <- tryCatch({
+      vegan::varpart(Y, ~region, ~library, data = df_ev)
+    }, error = function(e) NULL)
+    
+    # Extract results
+    if (!is.null(vp)) {
+      adj <- vp$part$indfract$Adj.R.squared
+      names(adj) <- c("region_unique", "library_unique", "shared", "residual")
+      res <- bind_cols(params, as_tibble_row(adj))
+      results[[length(results)+1]] <- res
+    }
+  }
+  
+  results_df <- bind_rows(results)
+  if (!is.null(output_dir)) {
+    if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+    out_file <- file.path(output_dir, paste0(domain, "_rda_varpart_summary.csv"))
+    readr::write_csv(results_df, out_file)
+    message("Results written to: ", out_file)
+  }
+  return(results_df)
+}
+
 
 # ===========================
 # 4. Plotting Functions
@@ -1061,5 +1134,89 @@ raincloud_two_param <- function(
   } else {
     print(p)
   }
+}
+
+#' Plot heatmaps of RDA/varpart results by filter parameters
+#'
+#' @param df         Data frame (must have columns: baq, C, minQ, minMapQ, ct, etc.)
+#' @param fill_var   Column name (string) to use for fill
+#' @param plot_type  "core" or "extended"
+#' @param legend_title Optional string for the legend title (defaults to fill_var)
+#' @param output_dir Optional directory to save plot
+#' @param output_file Optional output filename
+#' @param ...        Additional arguments passed to ggplot2::labs() or theme()
+#' @return           Invisibly, the ggplot object
+#' @export
+plot_rda_heatmap <- function(
+    df,
+    fill_var,
+    plot_type    = c("core", "extended"),
+    legend_title = NULL,
+    output_dir   = NULL,
+    output_file  = NULL,
+    ...
+) {
+  plot_type <- match.arg(plot_type)
+  # Defensive: make sure relevant columns exist and are factors for plotting
+  df <- df %>%
+    dplyr::mutate(
+      baq        = factor(baq, levels = 0:2, labels = paste0("baq: ", 0:2)),
+      minQ       = factor(minQ),
+      minMapQ    = factor(minMapQ),
+      call_thresh= factor(ct),
+      clipC      = factor(C),
+      C_ct       = paste0("c: ", clipC, " / ct: ", call_thresh)
+    )
+  
+  if (!fill_var %in% names(df)) stop(sprintf("Column '%s' not found in dataframe.", fill_var))
+  
+  if (plot_type == "core") {
+    df_plot <- df %>% dplyr::filter(minMapQ != "50", clipC %in% c("0", "50"))
+    p <- ggplot(df_plot, aes(x = minQ, y = minMapQ, fill = .data[[fill_var]])) +
+      geom_tile(linetype = "blank") +
+      facet_grid(baq ~ C_ct, labeller = label_value)
+  } else if (plot_type == "extended") {
+    df_plot <- df %>% dplyr::filter(baq == "baq: 0" & clipC %in% c(0, 100, 60, 75))
+    p <- ggplot(df_plot, aes(x = minQ, y = minMapQ, fill = .data[[fill_var]])) +
+      geom_tile(linetype = "blank") +
+      facet_grid(clipC ~ call_thresh, labeller = label_value)
+  }
+  
+  if (is.null(legend_title)) legend_title <- fill_var
+  
+  # Allow user to override or add labels/theme options via ...
+  gg_extra <- list(...)
+  labs_args <- gg_extra[names(gg_extra) %in% names(formals(ggplot2::labs))]
+  theme_args <- gg_extra[names(gg_extra) %in% names(formals(ggplot2::theme))]
+  
+  p <- p +
+    scale_fill_viridis_c(name = legend_title) +
+    labs(x = "minQ", y = "minMapQ", !!!labs_args) +
+    theme_minimal() +
+    do.call(theme, c(
+      list(
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.spacing = unit(0, "pt"),
+        strip.placement = "outside",
+        strip.text.x.top = element_text(angle = 45),
+        strip.text.y.right = element_text(angle = 0)
+      ),
+      theme_args
+    ))
+  
+  if (!is.null(output_dir)) {
+    if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+    if (is.null(output_file)) {
+      output_file <- paste0("rda_heatmap_", fill_var, "_", plot_type, ".png")
+    }
+    save_path <- file.path(output_dir, output_file)
+    ggsave(save_path, plot = p, width = 10, height = 6, dpi = 300, bg = "white")
+    message("Saved plot to ", save_path)
+  } else {
+    print(p)
+  }
+  invisible(p)
 }
 # --- End of Script ---
