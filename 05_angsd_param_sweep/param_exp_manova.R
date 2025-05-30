@@ -1,4 +1,8 @@
+# Note! The results of this approach were difficult to interpret and
+# did not correspond well with the structure direclty observed from the biplots.
+# Probably don't use this script. 
 # run_pca_manova.R
+#
 
 # ---------- INPUT ARGUMENTS ----------
 args        <- commandArgs(trailingOnly = TRUE)
