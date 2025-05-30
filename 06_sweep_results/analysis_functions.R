@@ -30,7 +30,7 @@ VALUE_STATS   <- c("pi", "theta_W", "MAF", "Hexp", "Hobs", "F", "absF", "tajima_
 # ============================
 # 1. Import/Utility Functions
 # ============================
-`
+#'
 #' Null coalescing operator
 #'
 #' Returns the left-hand side if it is not \code{NULL}, otherwise returns the right-hand side.
@@ -481,7 +481,7 @@ plot_indvhet <- function(
       facet_grid(clipC ~ call_thresh, labeller = label_value)
   }
   if (plot_type == "pop") {
-    df_plot <- df %>% filter(baq == "baq: 0", call_thresh == "6")
+    df_plot <- df %>% filter(baq == "baq: 0", call_thresh == "6", clipC %in% c("0", "60", "75", "100"))
     p <- ggplot(df_plot, aes(x = minQ, y = pop_code, fill = .data[[fill_var]])) +
       geom_tile(linetype = "blank") +
       facet_grid(clipC ~ minMapQ, labeller = label_value)
