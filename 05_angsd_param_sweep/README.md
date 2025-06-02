@@ -19,15 +19,17 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 
 # Scripts
 
-* **`param_exp_cap_mapq.py`**:
-* **`param_exp_sample_selection.R`**: 
-* **`param_exp_ref_step1.sh`**: 
-* **`param_exp_ref_step2.sh`**:
-* **`param_exp_ref_step3.sh`**:
-* **`param_exp_popstats.sh`**:
-* **`param_exp_summarize_popstats.R`**:
-* **`param_exp_PCA.sh`**:
-* **`param_exp_indvhet.sh`**: 
+* **`param_exp_cap_mapq.py`**: illustrates the effects of adjusting mapping qualities (`-C`) on alignment scores 
+* **`param_exp_sample_selection.R`**: selects experimental samples/populations
+* **`param_exp_ref_step1.sh`**: selects 100 Mbp of long, non-contaminant scaffolds, divides into 10 subsets, and creates indexed reference/ANGSD files.
+* **`param_exp_ref_step2.sh`**: runs ANGSD on reference subsets for each domain, generating read count matrices and positions.
+* **`param_exp_ref_step3.sh`**: concatenates position files, builds experimental references, and generates domain-specific region and site files.
+* **`param_exp_popstats.sh`**: runs ANGSD for each parameter combination, producing site/population-level statistics and likelihoods.
+* **`param_exp_summarize_popstats.R`**: applies library call-rate filters, generates genotype likelihoods for PCAngsd, and summarizes population statistics.
+* **`param_exp_PCA.sh`**: performs PCA analysis for each parameter set.
+* **`param_exp_indvhet.sh`**: computes individual heterozygosity for mixed-library populations.
+---
+
 ---
 
 # Objectives
@@ -37,16 +39,17 @@ Variant filters have a profound impact on downstream estimates of population str
 Our objective was to assess the influence of filter parameter settings across three key analyses, aiming to minimize technical artifacts (e.g., batch effects, allelic dropout) while preserving known biological signal:
 
 1. **Population-level site statistics:**
-    - Evaluated the impact of parameter choices on H<sub>e</sub>, H<sub>o</sub>, F, π, Θ<sub>w</sub>, and MAF 
-    - Identified settings that led to biologically implausible estimates, if any.
+     - Evaluated the impact of parameter choices on H<sub>e</sub>, H<sub>o</sub>, F, π, Θ<sub>w</sub>, and MAF 
+     - Identified settings that led to biologically implausible estimates, if any.
       
 2. **PCA and RDA on principal coordinates:**
-    - RDA on principal components to partition variance explained by sequencing library and geographic region.
+     - Visual inspection of PCA biplots
+     - Partitioned variance explained by sequencing library and geographic region.
       
 3. **Individual heterozygosity estimates:**
-    - Assessed parameter effects on individual variation in mixed-library populations.
+     - Assessed parameter effects on individual variation in mixed-library populations.
 
-We conducted the analyses over a grid of parameter settings:
+Analyses were conducted over a grid of parameter settings:
 
 - **Base Quality (`-minQ`)**: 20, 30
 - **Mapping Quality (`-minMapQ`)**: 20, 30, 40
@@ -54,9 +57,9 @@ We conducted the analyses over a grid of parameter settings:
 - **Mapping Quality Capping Coefficient (`-C`)**: 0, 50
 - **Per-Library Call Rate Filters**: 40%, 50%, and 60%
 
-To further refine parameter choices, we extended analyses to a wider range of `-C` values after identifying promising combinations.
+Additional `-C` and `-minMapQ` values were explored for promising combinations.
 
-Below, we discuss the potential effects of each filter parameter. For implementation details, skip to [Experimental-design](https://github.com/lxsllvn/spruceGBS/edit/main/05_angsd_param_sweep/README.md#experimental-design).
+---
 
 ---
 
@@ -64,16 +67,16 @@ Below, we discuss the potential effects of each filter parameter. For implementa
 
 ## Minimum base quality (`-minQ`)
 
-Our dataset includes libraries sequenced on the HiSeq and NovaSeq. We attempted to mitigate platform differences during read quality control, but identifying an appropriate minimum base quality must account for three important differences: 
+Our dataset includes libraries sequenced on the HiSeq and NovaSeq platforms. While read QC mitigates some platform differences, a minimum base quality threshold must consider:
 1. **2- vs. 4-channel chemistry**. Unlike the Hiseq, where each base has its own dye, NovaSeq bases are encoded by combinations of two dyes, and low-quality or missing bases are often called as a G.
-2. **Binned vs. continuous Q‐scores**. The HiSeq reports continuous Phred scores, whereas the Novoseq collapses Q scores in two eight discrete bins. As a result, the same reported Q score does not necessarily indicate the same error probability. 
+2. **Binned vs. continuous Q‐scores**. The HiSeq reports continuous Phred scores, whereas the Novoseq collapses Q scores into eight discrete bins. As a result, the same reported Q score does not necessarily indicate the same error probability. 
 3. **Underlying error spectra**. Platforms differ in both the type of sequencing errors they produce and the context of these errors. Hiseq reads show pronounced cycle-dependent quality drop-offs and errors tend to cluster in just a few sequence contexts (e.g. [Minoche et al. 2011](https://genomebiology.biomedcentral.com/articles/10.1186/gb-2011-12-11-r112)). NovaSeq reads are enriched for poly-g artifacts as a result of their 2-channel chemistry, but other error rates tend to be more uniform across sequence contexts (e.g. [Ma et al. 2019](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1659-6)).
 
-In addition, samples differ in the quality and amount of their starting DNA. Degraded DNA may show more deamination artefacts and lower per‐base quality, and the minimum Q must balance false positives against the risk of exacerbating library-specific missingness. 
+In addition, samples differ in the quality and amount of their starting DNA. Degraded DNA may show more deamination artefacts and lower base qualities, and the minimum Q must balance false positives against the risk of exacerbating library-specific missingness. 
 
 ## Minimum mapping quality (`-minMapQ`)
 
-The *Picea* nuclear genome is > 70% TEs, and while the GBS protocol enriches the non-repetitive fraction of the genome, this presents a problem for ensuring that reads mapping to the same coordinates actually originated from the same place in the genome. Our dataset spans at least diverged populations, whereas the reference assembly originates from a single tree in central Sweden. Reads from diverged populations can have systematically lower MQs, even if they are correctly mapped to their homologs in the reference. The choice of minimum mapping qualities must therefore balance against spurious alleles without systematically reducing coverage and biasing allele frequencies in non-reference populations. 
+The *Picea* nuclear genome is > 70% TEs, and while the GBS protocol enriches the non-repetitive fraction of the genome, this presents a problem for ensuring that reads mapping to the same coordinates actually originated from the same place in the genome. Our dataset spans at least three diverged populations, whereas the reference assembly originates from a single tree in central Sweden. Reads from diverged populations can have systematically lower MQs, even if they are correctly mapped to their homologs in the reference. The choice of minimum mapping qualities must therefore balance against spurious alleles without systematically reducing coverage and biasing allele frequencies in non-reference populations. 
 
 ## Base alignment quality (`-baq`) model
 
@@ -201,19 +204,17 @@ Filtering on overall site call-rate can hide, or even worsen, systematic missing
 
 ---
 
+---
+
 # Experimental design
 
 ## Sample selection
 
-We identified samples from each domain where library effects should be most distinguishable from real genetic structure. Specifically, these samples were:
-
-1.  ≥ 25% percentile in mapped reads and scaffold coverage to exclude potentially unrepresentative marginal samples
-2. from populations (i.e., a single collection site) with ≥ 5 sampled trees, 
-
-and were:
-
-3. from stands where ≤75% of trees were sequenced in a single library (56% on average), or
-4. within 100 km (≤ 250 km for Siberia) of a population with a different majority library.
+We selected samples from each domain where library effects should be most distinguishable from genetic structure:
+1. At least 25th percentile for both mapped reads and scaffold coverage.
+2. From populations with ≥5 sampled trees.
+3. From stands where ≤75% of trees sequenced in a single library (mean: 56%), **or**
+4. Within 100 km (≤250 km for Siberia) of a population dominated by a different library.
 
 Given the outcrossing mating system of *Picea*, trees from the same collection site are unlikely to deviate from Hardy-Weinberg equilibrium or show strong variation in individual heterozygosity. Genetic structure develops slowly in *Picea*, making batch effects a likely source of any apparent differentiation between stands in relatively close proximity. 
 
@@ -254,15 +255,17 @@ status_table <- build_population_status(mixed_tbl = mixed_pops,
 **Outputs**
 * `angsd_parameter_exp_pops.csv`: summary table of populations used in the parameter sweep experiment 
 
+
 ## Scaffold selection
 
-Finding sites that yield enough SNPs for analysis while minimizing resources during the parameter sweep requires some setup. First, I took 100 Mbp from the longest scaffolds, divided this into 10 reference subsets (`param_exp_ref_step1.sh`). Then, I ran ANGSD on each reference subset to find sites with < 50% missing data, using samples from each domain separately (`param_exp_ref_step2.sh`). Lastly, I created the experimental references from these sites, resulting in an indexed fasta and the ANGSD site and region files for each domain, e.g. siberia_experiment_ref.fa, siberia_experiment_ref_regions, and siberia_experiment_ref_sites (`param_exp_ref_step3.sh`). 
+Conducting the full parameter sweep over the [target regions](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref) identified in Step 2 is not computationally feasible. Finding sites that yield enough SNPs for analysis while minimizing resources is a three-step process:
+- `param_exp_ref_step1.sh`: selects 100 Mbp from the longest non-contaminant scaffolds and divides them into 10 balanced reference subsets to enable efficient parallel processing.
+- `param_exp_ref_step2.sh`: runs ANGSD on each reference subset, separately for each domain, to identify sites with less than 50% missing data, thereby focusing analysis on reliably genotyped regions.
+- `param_exp_ref_step3.sh`: merges high-quality sites from all subsets to construct domain-specific experimental references—producing indexed FASTA files and corresponding ANGSD region and site files for downstream analysis.
 
-### Create reference subsets
+### `param_exp_ref_step1.sh`: reference genome subsets
 
 select 100 Mbp from the longest putatively non-contaminant scaffolds (i.e., those without "putative contaminant" in their fasta headers), divided this into 10 subsets, and created a indexed reference genome and ANGSD region and site files
-
-#### `param_exp_ref_step1.sh` usage
 
 ```
 #!/bin/bash
@@ -285,19 +288,17 @@ sbatch param_exp_ref_step1.sh \
 * `target_scaff_pt_a{a..j}_regions` - ANGSD region file
 * `target_scaff_pt_a{a..j}_sites` - ANGSD sites file
 
-### Domain-level site discovery
+### `param_exp_ref_step2.sh`: 
 
 For each domain, I then calculated the read count matrix of each reference subset using the most lenient set of filter combinations (`-baq 0 -C 0 -minQ 20 -minMapQ 20`) and required a site to be present in at least half the samples.
 
-#### `param_exp_ref_step2.sh` usage
-
- Allocate ca. 12 gb memory for southern and siberia; ca. 24 for northern 
+Allocate ca. 12 gb memory for southern and siberia; ca. 24 for northern 
 
 ```
 #!/bin/bash
 # Loop through parameter sets a to j and submit each job to SLURM
 for i in {a..j}; do
-    sbatch "$SCRIPTS/angsd_param_exp_discovery.sh" \
+    sbatch SCRIPTS/param_exp_ref_step2.sh \
         "$i" \
         "southern" \
         "$SPRUCE_PROJECT/parameter_testing/parameter_exp_southern_bamlist" \
@@ -317,15 +318,13 @@ done
 
 **NB!** The `*.counts.gz` matrix does not have informative row or column names. Most, but not all, ANGSD output follows this convention. Some files with positional data from ANGSD use `chr` and `pos`, like `.pos.gz`, but others use `Chromo` and `position` and there's probably other versions as well. 
 
-### Experimental reference preparation
+### `param_exp_ref_step3.sh`:
 
 Then, concatenate the pos.gzs, parse into a bed file and ANGSD region and site files, and build and index experimental reference  
 
-#### `param_exp_ref_step3.sh` usage
-
 ```
 #!/bin/bash
-sbatch ${SCRIPTS}/angsd_param_exp_domain_refprep.sh \
+sbatch SCRIPTS/param_exp_ref_step3.sh \
 	"southern" \
 	"${SPRUCE_PROJECT}/parameter_testing/exp_ref/southern_site_discovery" \
 	"${SPRUCE_PROJECT}/parameter_testing/exp_ref"
@@ -345,7 +344,7 @@ sbatch ${SCRIPTS}/angsd_param_exp_domain_refprep.sh \
   * `${DOMAIN}_experiment_ref_regions`
 
 ---
-  
+
 # Site and population-level statistics
 
 Uses the [experimental samples](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#sample-selection) and [experimental reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection)
@@ -393,10 +392,10 @@ Per-population BAM lists should be stored in "${DOMAIN}_populations/*.txt"
 │   ├── saf2theta.thetas.gz   # binary per-site Θ estimates
 │   ├── saf2theta.thetas.idx  # binary index file
 │   ├── thetas.persite.txt    # neutrality test statistics π and Θ estimators
-│   ├── thetas.summary.pestPG # per-scaffold summary π and Θ estimators
-└── domain_sfs.counts.gz      # read count matrix, nrow sites X ncol samples
-└── domain_sfs.pos.gz         # scaffold names and postions
-└── domain_sfs.mafs.gz        # domain-level minor allele frequences
+│   └── thetas.summary.pestPG # per-scaffold summary π and Θ estimators
+├── domain_sfs.counts.gz      # read count matrix, nrow sites X ncol samples
+├── domain_sfs.pos.gz         # scaffold names and postions
+├── domain_sfs.mafs.gz        # domain-level minor allele frequencies
 └── domain_sfs.beagle.gz      # domain-level genotype likelihoods in 
                               # beagle format, used for PCAngsd later
 ```
@@ -427,8 +426,8 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 ├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/
 │   ├── ${DOMAIN}_${PARAM_ID}_ct4.beagle.gz  # beagle genotype likelihoods for sites with library call rate > 40%
 │   ├── ${DOMAIN}_${PARAM_ID}_ct5.beagle.gz  # library call rate > 50%
-│   ├── ${DOMAIN}_${PARAM_ID}_ct6.beagle.gz  # library call rate > 60%
-└── $DOMAIN_angsd_param_summaries.csv        # collected results for all loci
+│   └── ${DOMAIN}_${PARAM_ID}_ct6.beagle.gz  # library call rate > 60%
+├── $DOMAIN_angsd_param_summaries.csv        # collected results for all loci
 └── $DOMAIN_maf05_angsd_param_summaries.csv  # collected results for domain-level MAF > 0.05 loci
 ```
 
@@ -438,8 +437,11 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 
 # RDA on principal components
 
-RDA on principal components sounds a bit ridiculous, but here, I actually am asking "how much do my explanatory variables explain the structure I see ***in the principal components***?" and not "how much do they explain genetic structure?" I initially tried using MANOVA on PCs, but the results were difficult/nonsense without handling the confounded variation between "library" and "region".
+In this analysis, we applied distance-based redundancy analysis (dd-RDA) to partition variance uniquely explained by geographic region and sequencing library. Specifically, we used the first two principal components (PCs) from PCAngsd as the response matrix. In typical ecological analyses, all principal components or coordinates are included in dd-RDA, as reducing dimensionality may overestimate the effect of explanatory variables. Here, however, our goal was not to interpret the total variation explained, but to detect strong batch effects—specifically, those visible in the first two PCs—rather than more subtle patterns (which we assess separately).
 
+We quantified the variation explained uniquely by region (controlling for library) and by library (controlling for region) and focused on the proportion of constrained varianced explained by region (i.e., the R2 of region | library, as a fraction of the summed R2 of region | library and library | region). This approach avoids parameter optimization that would simply maximize the amount of variation explained by region, which risks biasing results toward a specific narrative (e.g., “genetic structure is explained by region”). Instead, it highlights parameter combinations where the region-to-library signal is strongest.
+
+In practice, RDA results were more consistent with visual inspection of PCA biplots than MANOVA, which was less interpretable due to the correlation between library and region.
 
 ---
 
