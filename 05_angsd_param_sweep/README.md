@@ -382,7 +382,7 @@ Per-population BAM lists should be stored in "${DOMAIN}_populations/*.txt"
 ```bash
 ├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/  
 ├── ${POP}/${POP}/            # one folder per population 
-│   ├── gl.arg                # run arguements
+│   ├── gl.arg                # run arguments
 │   ├── gl.beagle.gz          # genotype likelihoods, beagle format
 │   ├── gl.hwe.gz             # per-site inbreeding coefficients 
 │   ├── gl.mafs.gz            # minor allele frequencies 
