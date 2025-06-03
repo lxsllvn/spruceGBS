@@ -12,7 +12,7 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 * * [Sample selection](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#sample-selection)
   * [Scaffold selection](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection)
 * [Parameter sweep: site and population-level statistics](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#site-and-population-level-statistics)
-* [Parameter sweep: PCA and MANOVA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates)
+* [Parameter sweep: PCA and dd-RDA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates)
 * [Parameter sweep: individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity)
 
 ---
@@ -352,7 +352,7 @@ Uses the [experimental samples](https://github.com/lxsllvn/spruceGBS/tree/main/0
 Calculates domain-level DP matrix and MAFs
 Calculates H<sub>e</sub>, H<sub>o</sub>, F, π, Θ<sub>w</sub>, and MAF by locus per population. 
 
-Call threshold and MAF filters are implemented in the R script, which uses the domain-level read depth matrix and MAFs. R script also prepares the data for the PCA and MANOVA.
+Call threshold and MAF filters are implemented in the R script, which uses the domain-level read depth matrix and MAFs. R script also prepares the data for the PCA with PCAngsd.
 
 ## **`param_exp_popstats.sh`** usage
 
