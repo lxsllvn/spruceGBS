@@ -1219,4 +1219,131 @@ plot_rda_heatmap <- function(
   }
   invisible(p)
 }
+
+
+#' Partition Individual Heterozygosity Variance by Library Across Parameter Combinations
+#'
+#' For each unique combination of input parameters, fits a linear mixed model with library as a random effect,
+#' then returns the variance components for library and residual variance. Optionally, plots the variance explained by library
+#' as a function of filtering parameters.
+#'
+#' @param df A data frame containing columns: \code{indv_het}, \code{library}, \code{baq}, \code{C}, \code{q}, \code{mq}, \code{ct}.
+#' @param plot_type Plot type, either \code{"core"} or \code{"extended"} (default: \code{"core"}). Only used if \code{plot = TRUE}.
+#' @param plot Logical; if \code{TRUE}, produces a plot summarizing library variance across parameter settings (default: \code{TRUE}).
+#' @param output_dir Optional. Directory to save plot to (if \code{plot = TRUE}). If not specified, plot is printed.
+#' @param output_file Optional. Filename to use if saving plot. If not specified, a default is used.
+#'
+#' @return If \code{plot = FALSE}, returns a data frame with parameter combinations and variance components (\code{library_var}, \code{resid_var}).
+#'         If \code{plot = TRUE}, returns (invisibly) the \code{ggplot} object and either prints or saves the plot.
+#'
+#' @details
+#' For each parameter combination, fits a mixed model: \code{indv_het ~ 1 + (1|library)}.
+#' Only parameter combinations with at least two libraries and at least two data points are modeled.
+#'
+#' @examples
+#' \dontrun{
+#'   # Just get the variance component table:
+#'   results <- indvhet_varcomp(df, plot = FALSE)
+#'
+#'   # Plot the results (core settings):
+#'   indvhet_varcomp(df, plot_type = "core", plot = TRUE)
+#'
+#'   # Save the plot to a file:
+#'   indvhet_varcomp(df, plot_type = "core", plot = TRUE, output_dir = "plots")
+#' }
+#'
+#' @import ggplot2
+#' @importFrom dplyr filter mutate
+#' @export
+indvhet_varcomp <- function(
+    df,
+    plot_type = c("core", "extended"),
+    plot = TRUE,
+    output_dir  = NULL,
+    output_file = NULL
+) {
+  # Get parameter combinations
+  param_combos <- unique(df[, c("baq", "C", "q", "mq", "ct")])
+  results <- data.frame(
+    baq = character(),
+    C = character(),
+    q = character(),
+    mq = character(),
+    ct = character(),
+    library_var = numeric(),
+    resid_var = numeric(),
+    stringsAsFactors = FALSE
+  )
+  # Loop through parameter combos
+  for (i in seq_len(nrow(param_combos))) {
+    idx <- with(df, 
+                baq == param_combos$baq[i] &
+                C   == param_combos$C[i] &
+                q   == param_combos$q[i] &
+                mq  == param_combos$mq[i] &
+                ct  == param_combos$ct[i])
+    subdat <- df[idx, ]
+    if (nrow(subdat) < 2 | length(unique(subdat$library)) < 2) next
+    mod <- lme4::lmer(indv_het ~ 1 + (1|library), data = subdat)
+    varcomp <- as.data.frame(VarCorr(mod))
+    results <- rbind(results, data.frame(
+      baq = param_combos$baq[i],
+      C = param_combos$C[i],
+      q = param_combos$q[i],
+      mq = param_combos$mq[i],
+      ct = param_combos$ct[i],
+      library_var = varcomp$vcov[varcomp$grp == "library"],
+      resid_var = varcomp$vcov[varcomp$grp == "Residual"]
+    ))
+  }
+  # If plot = FALSE, just return results
+  if (!plot) return(results)
+
+  plot_type <- match.arg(plot_type)
+  library(ggplot2)
+  library(dplyr)
+
+  if (plot_type == "core") {
+    results_core <- results %>%
+      filter(mq != 50) %>%
+      filter(C %in% c("0", "50")) %>%
+      mutate(baq = factor(baq, levels = 0:2, labels = paste0("baq: ", 0:2)),
+             C_ct = paste0("c: ", C, " / ct: ", ct))
+
+    p <- ggplot(results_core, aes(x = q, y = mq, fill = library_var)) +
+      geom_tile(linetype = "blank") +
+      facet_grid(baq ~ C_ct, labeller = label_value)
+  }
+  if (plot_type == "extended") {
+    results_extend <- results %>%
+      filter(baq == 0) %>%
+      filter(C %in% c("0", "60", "75", "100"))
+
+    p <- ggplot(results_extend, aes(x = q, y = mq, fill = library_var)) +
+      geom_tile(linetype = "blank") +
+      facet_grid(C ~ ct, labeller = label_value)
+  }
+  p <- p +
+    scale_fill_viridis_c() +
+    labs(x = "minQ", y = "minMapQ") +
+    theme_minimal() +
+    theme(
+      panel.spacing = unit(0, "pt"),
+      strip.placement = "outside",
+      strip.text.x.top = element_text(angle = 45),
+      strip.text.y.right = element_text(angle = 0)
+    )
+
+  if (!is.null(output_dir)) {
+    if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+    if (is.null(output_file)) output_file <- paste0("indv_het_library_var_", plot_type, ".png")
+    save_path <- file.path(output_dir, output_file)
+    ggsave(save_path, plot = p, width = 10, height = 6, dpi = 300, bg = "white")
+    message("Saved plot to ", save_path)
+  } else {
+    print(p)
+  }
+  invisible(p)
+}
+
 # --- End of Script ---
