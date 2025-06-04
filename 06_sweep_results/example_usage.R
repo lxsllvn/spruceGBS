@@ -22,6 +22,31 @@ for (dom in domains) {
   }
 }
 
+
+# -------------------------------------------------------
+# Summary heatmaps of variance in individual heterozygosity
+# explained by library 
+# -------------------------------------------------------
+
+domains   <- c("northern", "southern", "siberia")
+plot_types <- c("core", "extended")
+meta <- read.csv("sequenced_samples_metadata.csv") 
+
+for (dom in domains) {
+  dat <- read.table(paste0(dom, "_indvhet_summary.tsv"), 
+                    header = TRUE) 
+  dat <- left_join(dat, meta[,c("bam_code", "library")])
+  dat$n_sites <- dat$ref_sites+dat$alt_sites
+  dat$indv_het <- dat$alt_sites/dat$n_sites
+  for (type in plot_types) {  
+    indvhet_varcomp(dat, 
+                    plot_type = type, 
+                    plot = TRUE,
+                    output_dir  = "indvhet",
+                    output_file = paste0(dom, "_", type, "_varcomp.png"))
+  }
+}
+
 # -------------------------------------------------------
 # Heatmaps of MANOVA variance explained by library, region, and their difference
 # -------------------------------------------------------
