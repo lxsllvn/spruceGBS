@@ -1302,13 +1302,19 @@ indvhet_varcomp <- function(
   plot_type <- match.arg(plot_type)
   library(ggplot2)
   library(dplyr)
+  
+  results <- results %>%
+   mutate(baq = factor(baq, levels = 0:2, labels = paste0("baq: ", 0:2)),
+   q = factor(q),
+   mq = factor(mq),
+   C = factor(C),
+   ct = factor(ct),
+   C_ct = paste0("c: ", C, " / ct: ", ct))
 
   if (plot_type == "core") {
     results_core <- results %>%
-      filter(mq != 50) %>%
-      filter(C %in% c("0", "50")) %>%
-      mutate(baq = factor(baq, levels = 0:2, labels = paste0("baq: ", 0:2)),
-             C_ct = paste0("c: ", C, " / ct: ", ct))
+      filter(mq != "50") %>%
+      filter(C %in% c("0", "50")) 
 
     p <- ggplot(results_core, aes(x = q, y = mq, fill = library_var)) +
       geom_tile(linetype = "blank") +
@@ -1316,7 +1322,7 @@ indvhet_varcomp <- function(
   }
   if (plot_type == "extended") {
     results_extend <- results %>%
-      filter(baq == 0) %>%
+      filter(baq == "baq: 0") %>%
       filter(C %in% c("0", "60", "75", "100"))
 
     p <- ggplot(results_extend, aes(x = q, y = mq, fill = library_var)) +
