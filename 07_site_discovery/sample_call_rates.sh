@@ -1,45 +1,54 @@
 #!/bin/bash
 set -euo pipefail
 
-# -----------------------------------------------------
-# Get per-sample call rates & mean depth from ANGSD *.count.gz files
-# -----------------------------------------------------
-# Usage:
-#   ./sample_call_rates.sh <counts_gz_file(s)> <minimumDP> <sample_names_file> [output_file]
-# Arguments:
-#   <counts_gz_file(s)>  - e.g., *.counts.gz, mysamples.counts.gz, PATH/TO/*.counts.gz. 
-#                          Don't quote the glob. 
-#   <minimumDp>          - minimum DP for a call
-#   [sample_names_file]  - list of sample codes, same order as ANGSD bamlist; optional if *.counts.gz has informative headers
-#   [output_file]        - (optional) path to save output
+# Helper for error messages
+die() { echo "$@" >&2; exit 1; }
 
-#!/bin/bash
-set -euo pipefail
+# -------------- Parse arguments ----------------
+counts_file=""
+minDP=""
+sample_list=""
+output_file=""
 
-if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <counts_gz_file(s)> <minimumDp> [sample_names_file] [output_file]"
-    exit 1
-fi
-
-# Get positional parameters from the end, but be flexible about presence/absence of sample_names_file
-# We'll check for snpcode in the header to decide what is required
-all_args=("$@")
-num_args=$#
-minDP="${all_args[$((num_args-2))]}"
-
-# Combine all counts files into one temp file
-tmpfile=$(mktemp)
-first=1
-for f in "${all_args[@]:0:$((num_args-2))}"; do
-    if [ $first -eq 1 ]; then
-        zcat "$f" > "$tmpfile"
-        first=0
-    else
-        zcat "$f" | tail -n +2 >> "$tmpfile"
-    fi
+# Parse long options
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+        --counts)
+            counts_file="$2"
+            shift 2
+            ;;
+        --minDP)
+            minDP="$2"
+            shift 2
+            ;;
+        --sample_list)
+            sample_list="$2"
+            shift 2
+            ;;
+        --out)
+            output_file="$2"
+            shift 2
+            ;;
+        -*)
+            die "Unknown option: $1"
+            ;;
+        *)
+            die "Unexpected argument: $1"
+            ;;
+    esac
 done
 
-# Read header line and check for snpcode
+# ----------- Check required arguments ----------
+[[ -z "$counts_file" ]] && die "Missing required argument: --counts counts.gz"
+[[ -z "$minDP" ]] && die "Missing required argument: --minDP <minDP>"
+
+[[ ! -f "$counts_file" ]] && die "Counts file '$counts_file' not found!"
+
+# ------------- Process counts file ------------
+tmpfile=$(mktemp)
+zcat "$counts_file" > "$tmpfile"
+
 header=$(head -n1 "$tmpfile")
 if [[ "$header" =~ ^snpcode[[:space:]] ]]; then
     has_snpcode=1
@@ -47,39 +56,13 @@ else
     has_snpcode=0
 fi
 
-# Decide which args are sample_names_file and output_file
 if [[ $has_snpcode -eq 1 ]]; then
-    # snpcode present: sample_names_file is optional
-    if [ "$num_args" -ge 3 ]; then
-        possible_out="${all_args[$((num_args-1))]}"
-        if [[ "$possible_out" =~ \.tsv$|\.txt$ ]]; then
-            output_file="$possible_out"
-        else
-            output_file=""
-        fi
-    else
-        output_file=""
-    fi
-    names_file=""
+    # snpcode column present; sample_list is optional
+    :
 else
-    # snpcode NOT present: sample_names_file is required
-    if [ "$num_args" -lt 3 ]; then
-        echo "Error: sample_names_file required if snpcode column is not present in input file(s)." >&2
-        exit 1
-    fi
-    possible_out="${all_args[$((num_args-1))]}"
-    possible_names="${all_args[$((num_args-2))]}"
-    if [[ "$possible_out" =~ \.tsv$|\.txt$ ]]; then
-        output_file="$possible_out"
-        names_file="$possible_names"
-    else
-        output_file=""
-        names_file="$possible_out"
-    fi
-    if [ ! -f "$names_file" ]; then
-        echo "Error: sample_names_file ($names_file) does not exist or is not a file." >&2
-        exit 1
-    fi
+    # snpcode column absent; sample_list required
+    [[ -z "$sample_list" ]] && die "Missing required argument: --sample_list <samples.txt> (needed when no snpcode column in counts file!)"
+    [[ ! -f "$sample_list" ]] && die "Sample list file '$sample_list' not found!"
 fi
 
 awk_script='
@@ -124,18 +107,19 @@ END {
         print column_names[i], call_rate, mean_depth;
     }
 }'
-# Export variables for awk
+
+# ------------- Run AWK --------------------------
 if [[ $has_snpcode -eq 1 ]]; then
-    if [ -n "$output_file" ]; then
+    if [[ -n "$output_file" ]]; then
         awk -F'\t' -v threshold="$minDP" -v has_snpcode=1 -v tmpfile="$tmpfile" "$awk_script" "$tmpfile" > "$output_file"
     else
         awk -F'\t' -v threshold="$minDP" -v has_snpcode=1 -v tmpfile="$tmpfile" "$awk_script" "$tmpfile"
     fi
 else
-    if [ -n "$output_file" ]; then
-        awk -F'\t' -v threshold="$minDP" -v has_snpcode=0 -v names_file="$names_file" "$awk_script" "$tmpfile" > "$output_file"
+    if [[ -n "$output_file" ]]; then
+        awk -F'\t' -v threshold="$minDP" -v has_snpcode=0 -v names_file="$sample_list" "$awk_script" "$tmpfile" > "$output_file"
     else
-        awk -F'\t' -v threshold="$minDP" -v has_snpcode=0 -v names_file="$names_file" "$awk_script" "$tmpfile"
+        awk -F'\t' -v threshold="$minDP" -v has_snpcode=0 -v names_file="$sample_list" "$awk_script" "$tmpfile"
     fi
 fi
 
