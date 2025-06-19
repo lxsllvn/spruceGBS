@@ -12,9 +12,12 @@ Usage:
       REF:      path to reference genome FASTA (indexed for samtools)
       OUTDIR:   directory to save merged .bed, .sites, .regions, .fa files
 
-  $0 --sites SITES OUTDIR
+  $0 --sites SITES OUTDIR [OUTNAME]
       SITES:    1-indexed ANGSD sites file (tab-separated: scaffold, position, end)
       OUTDIR:   directory to save region and index files
+      OUTNAME:  optionally specify an output name for the angsd region file; 
+                by default, uses the SITES filename and replaces angsd_sites 
+                with angsd_regions (if present) or just appends _regions if not 
 EOF
   exit 1
 }
@@ -28,13 +31,27 @@ shift
 
 case "$mode" in
   --sites)
-    if [ "$#" -ne 2 ]; then usage; fi
+    if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then usage; fi
     SITES="$1"
     OUTDIR="$2"
     mkdir -p "$OUTDIR"
 
+    # Default region file logic
+    if [ "$#" -eq 3 ]; then
+      REF_REGIONS="$3"
+    else
+      base="$(basename "$SITES")"
+      # If name contains "angsd_sites", replace with "angsd_regions", else append "_regions"
+      if [[ "$base" == *angsd_sites* ]]; then
+        region_base="${base/angsd_sites/angsd_regions}"
+      else
+        region_base="${base}_regions"
+      fi
+      REF_REGIONS="${OUTDIR}/${region_base}"
+    fi
+
     # Create ANGSD region file from sites
-    cut -f1 "$SITES" | sort -u > "${OUTDIR}/ref_regions"
+    cut -f1 "$SITES" | sort -u > "$REF_REGIONS"
 
     # ANGSD sites index
     ml -r
