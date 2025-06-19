@@ -6,7 +6,7 @@ Implements **Step 6: Analyze parameter sweep of the spruceGBS pipeline**. Select
 
 # Contents
 
-* **`analysis_functions.R`**: Parse, summarize, model, and plot results of the [individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity), [PCA/RDA]([https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#rda-on-principal-components), and [site and population-level statistics](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#site-and-population-level-statistics) experiments.
+* **`analysis_functions.R`**: Parse, summarize, model, and plot results of the [individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity), [PCA/RDA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#rda-on-principal-components), and [site and population-level statistics](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#site-and-population-level-statistics) experiments.
 * **`example_usage.R`**: Workflow used to create the plots summarized here. 
 
 ---
