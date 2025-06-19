@@ -12,7 +12,7 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 * * [Sample selection](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#sample-selection)
   * [Scaffold selection](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection)
 * [Parameter sweep: site and population-level statistics](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#site-and-population-level-statistics)
-* [Parameter sweep: PCA and dd-RDA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates)
+* [Parameter sweep: PCA and dd-RDA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#rda-on-principal-components)
 * [Parameter sweep: individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity)
 
 ---
