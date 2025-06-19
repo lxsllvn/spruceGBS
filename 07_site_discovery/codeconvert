@@ -1,0 +1,48 @@
+#!/bin/bash
+# codeconvert: Split or merge SNP codes between "scaffold_pos" and tab-delimited formats.
+#
+# Usage:
+#   codeconvert --split input.txt output.txt   # Converts codes like SCAFFOLD_POS to SCAFFOLD <tab> POS
+#   codeconvert --merge input.txt output.txt   # Converts SCAFFOLD <tab> POS to SCAFFOLD_POS
+#
+# Note:
+#   This script handles scaffold codes containing either one or two underscores,
+#   e.g. "chloroplast_106041" or "MA_9995510_2928". In --split mode, it separates
+#   the position field from the scaffold by splitting on the last underscore, so
+#   both typical P. abies (spruce) and chloroplast SNP codes are supported.
+
+if [[ $# -ne 3 ]]; then
+  echo "Usage: codeconvert --split|--merge input.txt output.txt"
+  exit 1
+fi
+
+mode="$1"
+infile="$2"
+outfile="$3"
+
+case "$mode" in
+  --split)
+    # Split on last underscore, regardless of how many are present
+    awk '{
+      pos = match($0, /_[^_]+$/)
+      if (pos > 0) {
+        print substr($0, 1, pos-1) "\t" substr($0, pos+1)
+      } else {
+        print $0 "\t"
+      }
+    }' "$infile" > "$outfile"
+    ;;
+  --merge)
+    awk -F'\t' '{
+      if (NF == 2) {
+        print $1 "_" $2
+      } else {
+        print $0
+      }
+    }' "$infile" > "$outfile"
+    ;;
+  *)
+    echo "Usage: codeconvert --split|--merge input.txt output.txt"
+    exit 1
+    ;;
+esac
