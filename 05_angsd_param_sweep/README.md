@@ -443,6 +443,26 @@ We quantified the variation explained uniquely by region (controlling for librar
 
 In practice, RDA results were more consistent with visual inspection of PCA biplots than MANOVA, which was less interpretable due to the correlation between library and region.
 
+# **`param_exp_PCA.sh`** usage
+
+```bash
+#!/bin/bash
+for i in siberia southern northern; do
+    find "${i}_results" -type f -name '*_ct[456].beagle.gz' -print0 \
+    | while IFS= read -r -d '' file; do
+        base="${file%.beagle.gz}"
+        sbatch "$SCRIPTS/pcangsd.sh" "$base" "$base"
+    done
+done
+```
+
+**Inputs**
+* `$1` –
+* `$2` – 
+  
+**Outputs**
+* 
+  
 ---
 
 # Individual heterozygosity
