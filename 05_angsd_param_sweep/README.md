@@ -12,7 +12,7 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 * * [Sample selection](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#sample-selection)
   * [Scaffold selection](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection)
 * [Parameter sweep: site and population-level statistics](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#site-and-population-level-statistics)
-* [Parameter sweep: PCA and dd-RDA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#manova-on-principal-coordinates)
+* [Parameter sweep: PCA and dd-RDA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#rda-on-principal-components)
 * [Parameter sweep: individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity)
 
 ---
@@ -443,6 +443,26 @@ We quantified the variation explained uniquely by region (controlling for librar
 
 In practice, RDA results were more consistent with visual inspection of PCA biplots than MANOVA, which was less interpretable due to the correlation between library and region.
 
+# **`param_exp_PCA.sh`** usage
+
+```bash
+#!/bin/bash
+for i in siberia southern northern; do
+    find "${i}_results" -type f -name '*_ct[456].beagle.gz' -print0 \
+    | while IFS= read -r -d '' file; do
+        base="${file%.beagle.gz}"
+        sbatch "$SCRIPTS/pcangsd.sh" "$base" "$base"
+    done
+done
+```
+
+**Inputs**
+* `$1` –
+* `$2` – 
+  
+**Outputs**
+* 
+  
 ---
 
 # Individual heterozygosity
