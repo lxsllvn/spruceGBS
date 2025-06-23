@@ -260,12 +260,10 @@ status_table <- build_population_status(mixed_tbl = mixed_pops,
 
 Conducting the full parameter sweep over the [target regions](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref) identified in Step 2 is not computationally feasible. Finding sites that yield enough SNPs for analysis while minimizing resources is a three-step process:
 - `param_exp_ref_step1.sh`: selects 100 Mbp from the longest non-contaminant scaffolds and divides them into 10 balanced reference subsets to enable efficient parallel processing.
-- `param_exp_ref_step2.sh`: runs ANGSD on each reference subset, separately for each domain, to identify sites with less than 50% missing data, thereby focusing analysis on reliably genotyped regions.
-- `param_exp_ref_step3.sh`: merges high-quality sites from all subsets to construct domain-specific experimental references—producing indexed FASTA files and corresponding ANGSD region and site files for downstream analysis.
+- `param_exp_ref_step2.sh`: runs ANGSD with lenient settings (`-baq 0 -C 0 -minQ 20 -minMapQ 20`) on each reference subset, separately for each domain, to identify sites with less than 50% missing data, thereby focusing analysis on reliably genotyped regions.
+- `param_exp_ref_step3.sh`: merges high-quality sites from all subsets to construct domain-specific experimental references—producing indexed fasta files and corresponding ANGSD region and site files for downstream analysis.
 
-### `param_exp_ref_step1.sh`: reference genome subsets
-
-select 100 Mbp from the longest putatively non-contaminant scaffolds (i.e., those without "putative contaminant" in their fasta headers), divided this into 10 subsets, and created a indexed reference genome and ANGSD region and site files
+### `param_exp_ref_step1.sh` usage
 
 ```
 #!/bin/bash
@@ -288,11 +286,7 @@ sbatch param_exp_ref_step1.sh \
 * `target_scaff_pt_a{a..j}_regions` - ANGSD region file
 * `target_scaff_pt_a{a..j}_sites` - ANGSD sites file
 
-### `param_exp_ref_step2.sh`: 
-
-For each domain, I then calculated the read count matrix of each reference subset using the most lenient set of filter combinations (`-baq 0 -C 0 -minQ 20 -minMapQ 20`) and required a site to be present in at least half the samples.
-
-Allocate ca. 12 gb memory for southern and siberia; ca. 24 for northern 
+### `param_exp_ref_step2.sh` usage
 
 ```
 #!/bin/bash
@@ -316,11 +310,8 @@ done
 * `${DOMAIN}_target_scaff_pt_a{a..j}.counts.gz` - read count matrices for each chunk 
 * `${DOMAIN}_target_scaff_pt_a{a..j}.pos.gz` - scaffold and position names for each chunk
 
-**NB!** The `*.counts.gz` matrix does not have informative row or column names. Most, but not all, ANGSD output follows this convention. Some files with positional data from ANGSD use `chr` and `pos`, like `.pos.gz`, but others use `Chromo` and `position` and there's probably other versions as well. 
 
-### `param_exp_ref_step3.sh`:
-
-Then, concatenate the pos.gzs, parse into a bed file and ANGSD region and site files, and build and index experimental reference  
+### `param_exp_ref_step3.sh` usage
 
 ```
 #!/bin/bash
@@ -335,7 +326,7 @@ sbatch SCRIPTS/param_exp_ref_step3.sh \
 - `$2` – directory containing `${DOMAIN}_target_scaff_pt_a{a..j}.counts.gz` and `${DOMAIN}_target_scaff_pt_a{a..j}.pos.gz` for each chunk; created by `param_exp_ref_step2.sh`
 - `$3` – output directory for the reference files
 
-**Output**
+**Outputs**
 * An experimental reference comprising sites with < 50% missing data and associated files per domain:
   * `${DOMAIN}_experiment_ref.fa`
   * `${DOMAIN}_experiment_ref.fa.fai`
