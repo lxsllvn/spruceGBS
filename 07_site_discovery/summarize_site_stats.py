@@ -4,9 +4,9 @@ import numpy as np
 import gzip
 import sys
 import os
+import glob
 
 def parse_counts_line(line):
-    # Handles possible empty trailing columns and whitespace
     values = [float(x) for x in line.rstrip('\n').split('\t') if x.strip() != ""]
     return np.array(values)
 
@@ -18,21 +18,39 @@ def parse_snpstat_line(line):
     mapQ_Z, mapQ_pval = fields[6].split(':')
     edge_z, edge_pval = fields[7].split(':')
     return [SB1, SB2, SB3, HWE_LRT, HWE_pval, baseQ_Z, baseQ_pval, mapQ_Z, mapQ_pval, edge_z, edge_pval]
-    
+
+def find_unique_file(folder, pattern, label, basename=None):
+    if basename:
+        files = glob.glob(os.path.join(folder, f"{basename}{pattern}"))
+        if len(files) == 1:
+            return files[0]
+        elif len(files) == 0:
+            sys.exit(f"[Error] No {label} file matching '{basename}{pattern}' in {folder}")
+        else:
+            sys.exit(f"[Error] Multiple {label} files matching '{basename}{pattern}' in {folder}: {files}")
+    else:
+        files = glob.glob(os.path.join(folder, f"*{pattern}"))
+        if len(files) == 1:
+            return files[0]
+        elif len(files) == 0:
+            sys.exit(f"[Error] No {label} file (*{pattern}) found in {folder}")
+        else:
+            sys.exit(f"[Error] More than one {label} file (*{pattern}) found in {folder}: {files}\nSpecify a basename to disambiguate.")
+
 def main():
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} BASENAME OUTFILE.tsv", file=sys.stderr)
+    if len(sys.argv) not in [3, 4]:
+        print(f"Usage: {sys.argv[0]} FOLDER OUTFILE.tsv [BASENAME]", file=sys.stderr)
         sys.exit(1)
-
-    basename = sys.argv[1]
+    folder = sys.argv[1]
     outfile = sys.argv[2]
-    pos_path = basename + '.pos.gz'
-    counts_path = basename + '.counts.gz'
-    hwe_path = basename + '.hwe.gz'
-    snpstat_path = basename + '.snpStat.gz'
+    basename = sys.argv[3] if len(sys.argv) == 4 else None
 
-    # Check if .snpStat.gz exists
+    pos_path = find_unique_file(folder, '.pos.gz', "positions", basename)
+    counts_path = find_unique_file(folder, '.counts.gz', "counts", basename)
+    hwe_path = find_unique_file(folder, '.hwe.gz', "HWE", basename)
+    snpstat_path = find_unique_file(folder, '.snpStat.gz', "snpStat", basename)
     use_snpstat = os.path.isfile(snpstat_path)
+
     if not use_snpstat:
         print(f"[Warning] {snpstat_path} not found, output columns will be 'NA'", file=sys.stderr)
 
@@ -73,7 +91,6 @@ def main():
 
         for i, line in enumerate(counts):
             depth = parse_counts_line(line)
-            # Avoid division by zero for empty lines
             if len(depth) == 0:
                 mean_depth = median_depth = call_rate = cv_depth = rel_IQR_depth = 0
             else:
