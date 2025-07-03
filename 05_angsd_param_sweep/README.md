@@ -376,7 +376,7 @@ Per-population BAM lists should be stored in "${DOMAIN}_populations/*.txt"
 │   ├── gl.beagle.gz          # genotype likelihoods, beagle format
 │   ├── gl.hwe.gz             # per-site inbreeding coefficients 
 │   ├── gl.mafs.gz            # minor allele frequencies 
-│   ├── gl.safs.gz            # binary site allele frequency likelihood
+│   ├── gl.safs.gz            # binary sample allele frequency likelihood
 │   ├── gl.safs.idx           # binary postion index
 │   ├── gl.safs.pos.gz        # binary scaffold names and positions
 │   ├── gl.sfs                # site frequency spectrum
@@ -408,7 +408,6 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 * `$2` – sample metadata table; must include: `bam_code`, `pop_code`, `domain`, `region`, `library`, `latitude`, `longitude`
 * `$3` – list of BAM files in the domain (e.g., parameter_exp_southern_bamlist)
 * `$4` – domain name (e.g., southern)
-
 
 **Outputs**
 ```bash
@@ -459,8 +458,37 @@ done
 The covariance matrices are saved to *.cov, which are the only output we analyzed as part of the parameter sweep. 
 
 ---
+---
 
 # Individual heterozygosity
+
+We estimated genome-wide heterozygosity per individual following [Lou and Therkildsen, 2021](https://doi.org/10.1111/1755-0998.13559). For mixed-library populations, we expect no systematic differences among individuals. For geographically proximate populations that only differ in library membership, we consider less variation in individual heterozygosity to be more plausible than higher variation.
+
+Individual heterozygosity is estimated in ANGSD by calculating the sample allele frequencies (SAF) from a single bam, and using realSFS to estimate the maximum likelihood site frequency spectrum (SFS) from the SAF. For diploid organisms, the second value in the SFS (the number of sites with one derived allele) is the number of expected heterozygote genotypes. This is implemented in `param_exp_indvhet.sh`, which also collects results into a single file per domain. 
+
+"Sample allele frequencies" in ANGSD are defined as "the probability of all read data given the sample allele frequency" by [Korneliussen et al. 2014](  (https://doi.org/10.1186/s12859-014-0356-4), which I found a bit confusing. 
+
+SAF give the probability of sampling *j* derived alleles for site *s*, summed over the 10 possible genotype of all individuals. For a diploid organism, there are three possible outcomes -- sampling 0, 1, and 2 derived alleles. The matrix of likelihoods (sites × outcomes) are saved to the .saf file, which is used as the input for realSFS. RealSFS then applies EM/BFGS optimization to SAFs to obtain the maximum likelihood of the SFS. 
+
+It's also worth noting that the SFS is a vector of derived allele counts, ranging from 0 (all ancestral) to 2\*nInd+1 (all derived). 
+
+## **`param_exp_indvhet.sh`** usage
+```bash
+#!/bin/bash
+sbatch $SCRIPTS/param_exp_indvhet.sh \
+"$SPRUCE_PROJECT/parameter_testing/exp_ref/southern_experiment_ref.fa" \
+southern \
+southern_mixed_pops.txt \
+southern_results
+```
+
+**Inputs**
+* `$1` – path to the [experimental reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection) for a domain
+* `$2` – domain name 
+* `$3` – list of population names, one per line
+* `$4` – base output directory name 
+
+**Outputs** 
 
 ---
 
