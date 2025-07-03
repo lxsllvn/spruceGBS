@@ -64,10 +64,10 @@ done < sample.list
 ---
 
 # Dependencies
-* [stacks](https://catchenlab.life.illinois.edu/stacks/) v. 2.0
-* [fastp](https://github.com/OpenGene/fastp) v. 0.23.4
-* [bwa](https://github.com/lh3/bwa) v. 0.7.18
-* [samtools](https://www.htslib.org/) v. 1.19.2
+* [stacks](https://catchenlab.life.illinois.edu/stacks/) 2.0
+* [fastp](https://github.com/OpenGene/fastp) 0.23.4
+* [bwa](https://github.com/lh3/bwa) 0.7.18
+* [samtools](https://www.htslib.org/) 1.19.2
 
 ---
 
