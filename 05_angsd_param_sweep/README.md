@@ -3,6 +3,7 @@
 Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 
 ---
+---
 
 # Contents
 
@@ -16,6 +17,7 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 * [Parameter sweep: individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity)
 
 ---
+---
 
 # Scripts
 
@@ -28,8 +30,8 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 * **`param_exp_summarize_popstats.R`**: applies library call-rate filters, generates genotype likelihoods for PCAngsd, and summarizes population statistics.
 * **`param_exp_PCA.sh`**: performs PCA analysis for each parameter set.
 * **`param_exp_indvhet.sh`**: computes individual heterozygosity for mixed-library populations.
----
 
+---
 ---
 
 # Objectives
@@ -60,7 +62,6 @@ Analyses were conducted over a grid of parameter settings:
 Additional `-C` and `-minMapQ` values were explored for promising combinations.
 
 ---
-
 ---
 
 # Filter parameters 
@@ -203,7 +204,6 @@ This down-weights moderately noisy alignments and eliminate the worst ones. Choo
 Filtering on overall site call-rate can hide, or even worsen, systematic missingness that tracks sequencing library rather than biology. When one library routinely fails to call certain loci (due to GBS fragment size-selection, DNA quality, GC/AT bias, or simply lower depth), those sites carry a “library fingerprint” of missing data. Downstream tools (PCA, ADMIXTURE) that impute or mean-replace missing genotypes will then recover batch effects instead of true population structure.
 
 ---
-
 ---
 
 # Experimental design
@@ -335,15 +335,15 @@ sbatch SCRIPTS/param_exp_ref_step3.sh \
   * `${DOMAIN}_experiment_ref_regions`
 
 ---
+---
 
 # Site and population-level statistics
 
-Uses the [experimental samples](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#sample-selection) and [experimental reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection)
+Once the [experimental samples](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#sample-selection) have been identified and the [experimental reference genomes](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#scaffold-selection) set up for each domain, the next step implements the actual parameter sweep. 
 
-Calculates domain-level DP matrix and MAFs
-Calculates H<sub>e</sub>, H<sub>o</sub>, F, π, Θ<sub>w</sub>, and MAF by locus per population. 
+ANGSD does not implement a library-level call rate threshold directly, so the parameter sweep is carried out in two steps. First, we estimated 1) domain-level read depth (DP) matrix, MAFs, and genotype likelihoods, and 2) H<sub>e</sub>, H<sub>o</sub>, F, π, Θ<sub>w</sub>, and MAF by locus per population, as implemented in `param_exp_popstats.sh`. 
 
-Call threshold and MAF filters are implemented in the R script, which uses the domain-level read depth matrix and MAFs. R script also prepares the data for the PCA with PCAngsd.
+Then, once `param_exp_popstats.sh` is completed, `param_exp_popstats.R` implements the library call-rate filter, creates filtered genotype likelihood files for PCA with `Pcangsd`, and summarizes the results in two files: `$DOMAIN_angsd_param_summaries.csv` for all loci and `$DOMAIN_maf05_angsd_param_summaries.csv` for loci with a domain-level MAF > 0.5. 
 
 ## **`param_exp_popstats.sh`** usage
 
@@ -393,8 +393,6 @@ Per-population BAM lists should be stored in "${DOMAIN}_populations/*.txt"
 
 Results from each parameter combination are written to `${DOMAIN}_${PARAM_ID}`. The `${PARAM_ID}` name specifies the `-baq` model, `-C` coefficent, `-minQ` and `-minMapQ` used in the run; for example `baq0_C0_q20_mq20`, `baq0_C0_q20_mq30`, `baq0_C0_q20_mq40`, ... . Domain-level results live in this folder and population-level results each live in their own subdirectory. 
 
-Once `param_exp_popstats.sh` is completed, `param_exp_popstats.R` implements the library call-rate filter, creates genotype likelihood files for each call rate for later use, and summarizes the results in two files: `$DOMAIN_angsd_param_summaries.csv` for all loci and `$DOMAIN_maf05_angsd_param_summaries.csv` for loci with a domain-level MAF > 0.5. 
-
 ## **`param_exp_popstats.R`** usage
 
 ```bash
@@ -415,15 +413,11 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 **Outputs**
 ```bash
 ├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/
-│   ├── ${DOMAIN}_${PARAM_ID}_ct4.beagle.gz  # beagle genotype likelihoods for sites with library call rate > 40%
-│   ├── ${DOMAIN}_${PARAM_ID}_ct5.beagle.gz  # library call rate > 50%
-│   └── ${DOMAIN}_${PARAM_ID}_ct6.beagle.gz  # library call rate > 60%
+│   └── ${DOMAIN}_${PARAM_ID}_ct{4..6}.beagle.gz  # beagle genotype likelihoods for sites with library call rate > 40/50/60%
 ├── $DOMAIN_angsd_param_summaries.csv        # collected results for all loci
 └── $DOMAIN_maf05_angsd_param_summaries.csv  # collected results for domain-level MAF > 0.05 loci
 ```
-
-`${DOMAIN}_${PARAM_ID}_ct4.beagle.gz` are the input files for PCAngsd in the next step. 
-
+---
 ---
 
 # RDA on principal components
@@ -432,9 +426,9 @@ In this analysis, we applied distance-based redundancy analysis (dd-RDA) to part
 
 We quantified the variation explained uniquely by region (controlling for library) and by library (controlling for region) and focused on the proportion of constrained varianced explained by region (i.e., the R2 of region | library, as a fraction of the summed R2 of region | library and library | region). This approach avoids parameter optimization that would simply maximize the amount of variation explained by region, which risks biasing results toward a specific narrative (e.g., “genetic structure is explained by region”). Instead, it highlights parameter combinations where the region-to-library signal is strongest.
 
-In practice, RDA results were more consistent with visual inspection of PCA biplots than MANOVA, which was less interpretable due to the correlation between library and region.
+In practice, RDA results were more consistent with visual inspection of PCA biplots than MANOVA, which was less interpretable due to the correlation between library and region. The implementation of the PCA/MANOVA is available in `param_exp_manova.R` for posterity.
 
-# **`param_exp_PCA.sh`** usage
+## **`param_exp_PCA.sh`** usage
 
 ```bash
 #!/bin/bash
@@ -448,12 +442,22 @@ done
 ```
 
 **Inputs**
-* `$1` –
-* `$2` – 
+* `$1` – path to [${DOMAIN}_${PARAM_ID}_ct{4..6}.beagle.gz](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#param_exp_popstatsr-usage)
+* `$2` – output name
   
 **Outputs**
-* 
-  
+```bash
+├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/
+│   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.cov 
+│   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.log
+│   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.pcadapt.zscores
+│   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.selection
+│   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.sites
+│   └──${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.selection
+```
+
+The covariance matrices are saved to *.cov, which are the only output we analyzed as part of the parameter sweep. 
+
 ---
 
 # Individual heterozygosity
