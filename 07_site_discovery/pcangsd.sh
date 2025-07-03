@@ -9,4 +9,4 @@ OUTPUT="$2"
 pcangsd \
   -b "${INPUT}" \
   -o "${OUTPUT}" \
-  --sites_save --snp_weights --pcadapt --selection --iter 500 --maf_iter 1000
+  --sites-save --snp-weights --pcadapt --selection --iter 500 --maf-iter 1000
