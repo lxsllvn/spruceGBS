@@ -102,8 +102,11 @@ write.table(df, "initial_qc_failed_samples.txt",
 
 List required modules, software, or packages:
 
-* [samtools](https://www.htslib.org/) v. 1.19.2
-* R (packages: ggplot2)
+* [samtools](https://www.htslib.org/) 1.19.2
+* R v. 4.2.1
+  - ggplot 3.5.1
 * write.unix() for Windows
+
+Note! I am using an old version of R because I don't want to refactor my tidyverse-related code. Some functions may be deprecated in the current version.
 
 ---
