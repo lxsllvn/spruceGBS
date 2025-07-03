@@ -501,13 +501,25 @@ ${OUTDIR}/
 └── indvhet_summary.tsv			    # heterozygosities for each individual,
                                             # call threshold, population, parameter
 					    # combination and domain
+```
+---
 ---
 
 # Dependencies
 
-List required modules, software, or packages:
+* [samtools](https://www.htslib.org/) 1.19.2
+* [angsd](https://github.com/ANGSD/angsd) 0.935
+* [Pcangsd](https://github.com/Rosemeis/pcangsd) 1.36.4
+* [Python 3.12.3](https://www.python.org/downloads/release/python-3123/) 
+* [SciPy-bundle](https://docs.hpc2n.umu.se/software/libs/SciPy-bundle/) 2023.11 for pcangsd and 2024.05 for `param_exp_cap_mapq.py`
+* [pysam](https://pysam.readthedocs.io/en/latest/index.html) 0.23.3
+* [R](https://www.r-project.org/) 4.2.1
+  - dplyr 1.1.4
+  - tidyr 1.3.0
+  - data.table 1.14.8
+  - tidyverse 2.0.0
 
-* 
+Note! I am using an old version of R because I don't want to refactor my tidyverse-related code. Some functions may be deprecated in the current version.
 
 ---
 
