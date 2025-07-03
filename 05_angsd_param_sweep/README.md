@@ -424,7 +424,7 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 
 In this analysis, we applied distance-based redundancy analysis (dd-RDA) to partition variance uniquely explained by geographic region and sequencing library. Specifically, we used the first two principal components (PCs) from PCAngsd as the response matrix. In typical ecological analyses, all principal components or coordinates are included in dd-RDA, as reducing dimensionality may overestimate the effect of explanatory variables. Here, however, our goal was not to interpret the total variation explained, but to detect strong batch effects—specifically, those visible in the first two PCs—rather than more subtle patterns (which we assess separately).
 
-We quantified the variation explained uniquely by region (controlling for library) and by library (controlling for region) and focused on the proportion of constrained varianced explained by region (i.e., the R2 of region | library, as a fraction of the summed R2 of region | library and library | region). This approach avoids parameter optimization that would simply maximize the amount of variation explained by region, which risks biasing results toward a specific narrative (e.g., “genetic structure is explained by region”). Instead, it highlights parameter combinations where the region-to-library signal is strongest.
+We quantified the variation explained uniquely by region (controlling for library) and by library (controlling for region) and focused on the proportion of constrained varianced explained by region (i.e., the R<sup>2</sup> of region | library, as a fraction of the summed R<sup>2</sup> of region | library and library | region). This approach avoids parameter optimization that would simply maximize the amount of variation explained by region, which risks biasing results toward a specific narrative (e.g., “genetic structure is explained by region”). Instead, it highlights parameter combinations where the region-to-library signal is strongest.
 
 In practice, RDA results were more consistent with visual inspection of PCA biplots than MANOVA, which was less interpretable due to the correlation between library and region. The implementation of the PCA/MANOVA is available in `param_exp_manova.R` for posterity.
 
@@ -453,7 +453,7 @@ done
 │   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.pcadapt.zscores
 │   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.selection
 │   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.sites
-│   └──${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.selection
+│   └── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.selection
 ```
 
 The covariance matrices are saved to *.cov, which are the only output we analyzed as part of the parameter sweep. 
