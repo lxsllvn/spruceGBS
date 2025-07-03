@@ -71,8 +71,8 @@ done < sample.list
 # Dependencies
 
 * [Java 8](https://github.com/adoptium/temurin8-binaries/releases); tested with jdk8u392-b08
-* [GATK v. 3.7-0-gcfedb67](https://console.cloud.google.com/storage/browser/gatk-software/package-archive/gatk;tab=objects?pli=1&prefix=&forceOnObjectsSortingFiltering=false). 
-* [samtools](https://www.htslib.org/) v. 1.19.2
+* [GATK 3.7-0-gcfedb67](https://console.cloud.google.com/storage/browser/gatk-software/package-archive/gatk;tab=objects?pli=1&prefix=&forceOnObjectsSortingFiltering=false). 
+* [samtools](https://www.htslib.org/) 1.19.2
 
 ---
 
