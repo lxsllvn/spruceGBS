@@ -101,8 +101,8 @@ done < sample.list
 ---
 
 # Dependencies
-* [samtools](https://www.htslib.org/) v. 1.19.2
-* [bedtools](https://github.com/arq5x/bedtools2) v. 2.31.0
-* [picard](https://github.com/broadinstitute/picard) v. 3.3.0
-* Java v. 17.0.6
+* [samtools](https://www.htslib.org/) 1.19.2
+* [bedtools](https://github.com/arq5x/bedtools2) 2.31.0
+* [picard](https://github.com/broadinstitute/picard)  3.3.0
+* Java 17.0.6
 
