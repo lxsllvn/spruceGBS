@@ -370,25 +370,25 @@ Per-population BAM lists should be stored in "${DOMAIN}_populations/*.txt"
 
 **Outputs** 
 ```bash
-├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/  
-├── ${POP}/${POP}/            # one folder per population 
-│   ├── gl.arg                # run arguments
-│   ├── gl.beagle.gz          # genotype likelihoods, beagle format
-│   ├── gl.hwe.gz             # per-site inbreeding coefficients 
-│   ├── gl.mafs.gz            # minor allele frequencies 
-│   ├── gl.safs.gz            # binary sample allele frequency likelihood
-│   ├── gl.safs.idx           # binary postion index
-│   ├── gl.safs.pos.gz        # binary scaffold names and positions
-│   ├── gl.sfs                # site frequency spectrum
-│   ├── saf2theta.thetas.gz   # binary per-site Θ estimates
-│   ├── saf2theta.thetas.idx  # binary index file
-│   ├── thetas.persite.txt    # neutrality test statistics π and Θ estimators
-│   └── thetas.summary.pestPG # per-scaffold summary π and Θ estimators
-├── domain_sfs.counts.gz      # read count matrix, nrow sites X ncol samples
-├── domain_sfs.pos.gz         # scaffold names and postions
-├── domain_sfs.mafs.gz        # domain-level minor allele frequencies
-└── domain_sfs.beagle.gz      # domain-level genotype likelihoods in 
-                              # beagle format, used for PCAngsd later
+${OUTDIR}/${DOMAIN}_${PARAM_ID}/  
+├── ${POP}/                        # one folder per population 
+│   ├── gl.arg                     # run arguments
+│   ├── gl.beagle.gz               # genotype likelihoods, beagle format
+│   ├── gl.hwe.gz                  # per-site inbreeding coefficients 
+│   ├── gl.mafs.gz                 # minor allele frequencies 
+│   ├── gl.safs.gz                 # binary sample allele frequency
+│   ├── gl.safs.idx                # binary position index
+│   ├── gl.safs.pos.gz             # binary scaffold names and positions
+│   ├── gl.sfs                     # site frequency spectrum
+│   ├── saf2theta.thetas.gz        # binary per-site Θ estimates
+│   ├── saf2theta.thetas.idx       # binary index file
+│   ├── thetas.persite.txt         # neutrality test statistics π and Θ estimators
+│   └── thetas.summary.pestPG      # per-scaffold summary π and Θ estimators
+├── domain_sfs.counts.gz           # read count matrix, nrow sites X ncol samples
+├── domain_sfs.pos.gz              # scaffold names and positions
+├── domain_sfs.mafs.gz             # domain-level minor allele frequencies
+└── domain_sfs.beagle.gz           # domain-level genotype likelihoods in 
+                                   # beagle format, used for PCAngsd later
 ```
 
 Results from each parameter combination are written to `${DOMAIN}_${PARAM_ID}`. The `${PARAM_ID}` name specifies the `-baq` model, `-C` coefficent, `-minQ` and `-minMapQ` used in the run; for example `baq0_C0_q20_mq20`, `baq0_C0_q20_mq30`, `baq0_C0_q20_mq40`, ... . Domain-level results live in this folder and population-level results each live in their own subdirectory. 
@@ -411,8 +411,8 @@ Rscript "${SCRIPTS}/angsd_param_exp_summary.R" \
 
 **Outputs**
 ```bash
-├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/
-│   └── ${DOMAIN}_${PARAM_ID}_ct{4..6}.beagle.gz  # beagle genotype likelihoods for sites with library call rate > 40/50/60%
+${OUTDIR}/${DOMAIN}_${PARAM_ID}/
+│   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.beagle.gz  # beagle genotype likelihoods for sites with library call rate > 40/50/60%
 ├── $DOMAIN_angsd_param_summaries.csv        # collected results for all loci
 └── $DOMAIN_maf05_angsd_param_summaries.csv  # collected results for domain-level MAF > 0.05 loci
 ```
@@ -446,7 +446,7 @@ done
   
 **Outputs**
 ```bash
-├── ${OUTDIR}/${DOMAIN}_${PARAM_ID}/
+${OUTDIR}/${DOMAIN}_${PARAM_ID}/
 │   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.cov 
 │   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.log
 │   ├── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.pcadapt.zscores
@@ -466,7 +466,7 @@ We estimated genome-wide heterozygosity per individual following [Lou and Therki
 
 Individual heterozygosity is estimated in ANGSD by calculating the sample allele frequencies (SAF) from a single bam, and using realSFS to estimate the maximum likelihood site frequency spectrum (SFS) from the SAF. For diploid organisms, the second value in the SFS (the number of sites with one derived allele) is the number of expected heterozygote genotypes. This is implemented in `param_exp_indvhet.sh`, which also collects results into a single file per domain. 
 
-"Sample allele frequencies" in ANGSD are defined as "the probability of all read data given the sample allele frequency" by [Korneliussen et al. 2014](  (https://doi.org/10.1186/s12859-014-0356-4), which I found a bit confusing. 
+"Sample allele frequencies" in ANGSD are defined as "the probability of all read data given the sample allele frequency" by [Korneliussen et al. 2014](https://doi.org/10.1186/s12859-014-0356-4), which I found a bit confusing. 
 
 SAF give the probability of sampling *j* derived alleles for site *s*, summed over the 10 possible genotype of all individuals. For a diploid organism, there are three possible outcomes -- sampling 0, 1, and 2 derived alleles. The matrix of likelihoods (sites × outcomes) are saved to the .saf file, which is used as the input for realSFS. RealSFS then applies EM/BFGS optimization to SAFs to obtain the maximum likelihood of the SFS. 
 
@@ -489,7 +489,18 @@ southern_results
 * `$4` – base output directory name 
 
 **Outputs** 
-
+```bash
+${OUTDIR}/
+│   ├── ${DOMAIN}_${PARAM_ID}/
+│   │	├── ${POP}/${POP}_indvhet_ct{4..6}/
+│   │   │    │── ${INDV}.arg                # run arguments
+│   │	│    ├── ${INDV}.safs.gz            # binary sample allele frequency
+│   │	│    ├── ${INDV}.safs.idx           # binary postion index
+│   │	│    ├── ${INDV}.safs.pos.gz        # binary scaffold names and positions
+│   │	│    └── ${INDV}.sfs                # site frequency spectrum
+└── indvhet_summary.tsv			    # heterozygosities for each individual,
+                                            # call threshold, population, parameter
+					    # combination and domain
 ---
 
 # Dependencies
