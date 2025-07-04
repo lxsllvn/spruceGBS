@@ -4,31 +4,62 @@ set -euo pipefail
 # Helper for error messages
 die() { echo "$@" >&2; exit 1; }
 
+usage_and_die() {
+    cat >&2 <<EOF
+
+Usage: $0 --counts <counts.gz> --minDP <minDP> [--sample_list <samples.txt>] [--out <output.tsv>]
+
+Required arguments:
+  --counts <counts.gz>         Input counts file (gzip-compressed, .gz)
+  --minDP <minDP>              Minimum depth per call (integer)
+
+Optional arguments:
+  --sample_list <samples.txt>  List of sample names (one per line).
+                               Required **if** counts.gz does NOT have a 'snpcode' column!
+  --out <output.tsv>           Output file (default: print to stdout)
+
+Example usage:
+  $0 --counts mydata.counts.gz --minDP 3 --out call_rates.tsv
+  $0 --counts mydata.counts.gz --minDP 3 --sample_list samples.txt
+
+Notes:
+- If the input counts.gz file includes a 'snpcode' column, --sample_list is optional.
+- If the 'snpcode' column is missing, you **must** provide --sample_list.
+EOF
+    exit 1
+}
+
 # -------------- Parse arguments ----------------
 counts_file=""
 minDP=""
 sample_list=""
 output_file=""
 
-# Parse long options
 while [[ $# -gt 0 ]]; do
     key="$1"
     case "$key" in
         --counts)
+            [[ $# -lt 2 || "$2" =~ ^-- ]] && usage_and_die
             counts_file="$2"
             shift 2
             ;;
         --minDP)
+            [[ $# -lt 2 || "$2" =~ ^-- ]] && usage_and_die
             minDP="$2"
             shift 2
             ;;
         --sample_list)
+            [[ $# -lt 2 || "$2" =~ ^-- ]] && usage_and_die
             sample_list="$2"
             shift 2
             ;;
         --out)
+            [[ $# -lt 2 || "$2" =~ ^-- ]] && usage_and_die
             output_file="$2"
             shift 2
+            ;;
+        --help)
+            usage_and_die
             ;;
         -*)
             die "Unknown option: $1"
@@ -40,9 +71,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ----------- Check required arguments ----------
-[[ -z "$counts_file" ]] && die "Missing required argument: --counts counts.gz"
-[[ -z "$minDP" ]] && die "Missing required argument: --minDP <minDP>"
-
+[[ -z "$counts_file" ]] && usage_and_die
+[[ -z "$minDP" ]] && usage_and_die
 [[ ! -f "$counts_file" ]] && die "Counts file '$counts_file' not found!"
 
 # ------------- Process counts file ------------
