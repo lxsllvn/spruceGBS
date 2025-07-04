@@ -9,12 +9,12 @@ Helpful summary goes here.
 # Contents
 
 * [Create ANGSD reference assembly](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
-* * [Split assembly](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
+  * [Split assembly](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
   * [Site discovery](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
   * [Create final ANGSD reference](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
 * [Calculate genotype likelihoods](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
 * [Site and sample quality filters](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
-* * [Site-level filters](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
+  * [Site-level filters](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
   * [Sample filtering](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
   * [Apply filters](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
 * [Assess and remove batch effects](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
@@ -48,7 +48,8 @@ Helpful summary goes here.
 
 # Create ANGSD reference assembly
 
-problem, solution, implementation. 
+Preparing the reference is again a three-step procedure. 
+First make the reduced reference subsets as previously, but this time with all target regions. Then, do site discovery to find sites that meet the filtering criteria in each domain. Next, collect all the sites over the subsets and create a single merged reference for each domain. 
 
 ## Split assembly
 
@@ -106,6 +107,8 @@ sbatch solve_all_my_problems.sh
 
 # Calculate genotype likelihoods
 
+With the ANGSD references created, we can now calculate genotype likelihoods for each domain, and output a bunch of useful things.
+
 ## `angsd_likelihoods.sh` usage
 
 ```bash
@@ -125,7 +128,12 @@ sbatch solve_all_my_problems.sh
 
 # Site and sample quality filters
 
+We summarize the site stats and use AUC-ROC to find filter parameters that can distinguish quite dubious from less dubious SNPs and their optimal thresholds. 
+
 ## Site-level filters
+
+site-level summary data from angsd is written to four different, potentially very large files. python script collect the results, calculates a few depth-related statistics, and saves the results to two summary files (all sites/maf > 0.05 sites)
+
 ### `summarize_site_stats.sh` usage
 
 ```bash
@@ -144,6 +152,7 @@ sbatch solve_all_my_problems.sh
 
 ### `auc_roc_filter.R` usage
 
+can any of the quality/depth metrics reliably distinguish egregiously bad from 'at least not awful' sites?
 
 ```bash
 #!/bin/bash
@@ -159,6 +168,8 @@ sbatch solve_all_my_problems.sh
   * `\<path/to/output2\>`: ...
 
 ### `snp_stats_filter.awk` usage
+
+outputs a list of snpcodes passing the filters. not sure that a big awk script is really needed here, but this script accepts column names and correctly returns sites meeting all conditions and ignores -nan/nan/inf/-inf 
 
 ```bash
 #!/bin/bash
@@ -209,6 +220,8 @@ sbatch solve_all_my_problems.sh
 
 ## Apply filters 
 
+by default, the beagle/counts.gz files do not have useful column names and .counts.gz doesn't have marker names, either. reheader_genotype_matrix.py adds this data to the files, which then allows subset_genotype_matrix.py to select specified samples and/or sites. 
+
 ### `reheader_genotype_matrix.sh` usage
 
 
@@ -243,6 +256,10 @@ sbatch solve_all_my_problems.sh
 ---
 
 # Assess and remove batch effects
+
+finds sites meeting minimum library call rate thresholds, creates beagle subsets, and then runs pcangsd
+
+note! need pcangsd 1.34.6; the pcadapt-zscores in at least some previous versions are in the wrong order; i.e. column 1 doesn't have the z-scores for PC1. 
 
 ## `library_call_thresholds.sh` usage
 
