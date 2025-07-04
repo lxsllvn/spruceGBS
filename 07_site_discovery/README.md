@@ -4,6 +4,10 @@ Implements Step 7: site discovery and filtering of the spruceGBS pipeline.
 
 Helpful summary goes here. 
 
+There is a lot of code, but most of the steps/code are just to get ANGSD to play nice with my dataset, get the results into more user-friendly formats, and filter the DP matrices/beagle likelihoods by sample and site. 
+
+interesting analytical choices are really only made in seleciton of site-level filters/thresholds, the batch effect analysis, and the population-stratified MAF selection 
+
 ---
 
 # Contents
