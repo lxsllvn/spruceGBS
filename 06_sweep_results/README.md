@@ -1,6 +1,6 @@
 # Overview
 
-Implements **Step 6: Analyze parameter sweep of the spruceGBS pipeline**. Selected results are also shown and discussed here.
+Implements **Step 6: Analyze parameter sweep** of the spruceGBS pipeline. Selected results are also shown and discussed here.
 
 ---
 
