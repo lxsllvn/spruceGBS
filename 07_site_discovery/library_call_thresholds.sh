@@ -11,9 +11,9 @@ set -euo pipefail
 #   META:      path to metadata file; must have a bam_code column with same names and a library column with library membership 
 #   OUTPATH:   path to save results
 #   OUTNAME:   basename for result files; the output generated are:
-#                ${OUTPATH}/${OUTNAME}_call_thresh0.${5..8};      snpcode lists with >50/60/70/80% call rate 
-#                ${OUTPATH}/${OUTNAME}.beagle.ct${5..8}.gz;       beagle subsets for each call rate
-#                ${OUTPATH}/${OUTNAME}.beagle.ct${5..8}.Pcangsd;  covariance matrices, selection statistics, etc from pcangsd
+#                ${OUTPATH}/${OUTNAME}_call_thresh0.${5..8};  snpcode lists with >50/60/70/80% call rate 
+#                ${OUTPATH}/${OUTNAME}.beagle.ct${5..8}.gz;   beagle subsets for each call rate
+#                ${OUTPATH}/${OUTNAME}.ct${5..8}.Pcangsd;     covariance matrices, selection statistics, etc from pcangsd
 # Example usage
 # $0 ./library_call_thresholds.sh \
 #     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_domain_filtered.counts.gz \
@@ -71,6 +71,6 @@ for i in 5 6 7 8
 do
 pcangsd \
   -b "${OUTPATH}/${OUTNAME}.beagle.ct${i}.gz" \
-  -o "${OUTPATH}/${OUTNAME}.beagle.ct${i}.Pcangsd" \
+  -o "${OUTPATH}/${OUTNAME}.ct${i}.Pcangsd" \
   --sites-save --snp-weights --pcadapt --selection --iter 500 --maf-iter 1000
 done
