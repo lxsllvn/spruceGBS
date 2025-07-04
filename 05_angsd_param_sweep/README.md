@@ -1,8 +1,7 @@
 # Overview
 
-Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
+Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline. This section describes the motivation and implementation of the sweep, and the data analysis and results are part of [Step 6: Analyze parameter sweep](https://github.com/lxsllvn/spruceGBS/blob/main/06_sweep_results/README.md).
 
----
 ---
 
 # Contents
@@ -16,7 +15,7 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 * [Parameter sweep: PCA and dd-RDA](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#rda-on-principal-components)
 * [Parameter sweep: individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/05_angsd_param_sweep#individual-heterozygosity)
 
----
+
 ---
 
 # Scripts
@@ -32,7 +31,7 @@ Implements **Step 5: ANGSD parameter sweep** of the spruceGBS pipeline.
 * **`param_exp_indvhet.sh`**: computes individual heterozygosity for mixed-library populations.
 
 ---
----
+
 
 # Objectives
 
@@ -62,7 +61,7 @@ Analyses were conducted over a grid of parameter settings:
 Additional `-C` and `-minMapQ` values were explored for promising combinations.
 
 ---
----
+
 
 # Filter parameters 
 
@@ -204,7 +203,6 @@ This down-weights moderately noisy alignments and eliminate the worst ones. Choo
 Filtering on overall site call-rate can hide, or even worsen, systematic missingness that tracks sequencing library rather than biology. When one library routinely fails to call certain loci (due to GBS fragment size-selection, DNA quality, GC/AT bias, or simply lower depth), those sites carry a “library fingerprint” of missing data. Downstream tools (PCA, ADMIXTURE) that impute or mean-replace missing genotypes will then recover batch effects instead of true population structure.
 
 ---
----
 
 # Experimental design
 
@@ -335,7 +333,6 @@ sbatch SCRIPTS/param_exp_ref_step3.sh \
   * `${DOMAIN}_experiment_ref_regions`
 
 ---
----
 
 # Site and population-level statistics
 
@@ -417,7 +414,6 @@ ${OUTDIR}/${DOMAIN}_${PARAM_ID}/
 └── $DOMAIN_maf05_angsd_param_summaries.csv  # collected results for domain-level MAF > 0.05 loci
 ```
 ---
----
 
 # RDA on principal components
 
@@ -455,9 +451,8 @@ ${OUTDIR}/${DOMAIN}_${PARAM_ID}/
 │   └── ${DOMAIN}_${PARAM_ID}_ct{4..6}.Pcangsd.selection
 ```
 
-The covariance matrices are saved to *.cov, which are the only output we analyzed as part of the parameter sweep. 
+The covariance matrices are saved to *.cov, which are the only output analyzed as part of the parameter sweep. The RDA is implemented as part of the [sweep analysis](https://github.com/lxsllvn/spruceGBS/edit/main/06_sweep_results/README.md)
 
----
 ---
 
 # Individual heterozygosity
@@ -503,7 +498,7 @@ ${OUTDIR}/
 					    # combination and domain
 ```
 ---
----
+
 
 # Dependencies
 
