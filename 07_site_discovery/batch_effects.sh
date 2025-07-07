@@ -72,5 +72,5 @@ do
 pcangsd \
   -b "${OUTPATH}/${OUTNAME}.beagle.ct${i}.gz" \
   -o "${OUTPATH}/${OUTNAME}.ct${i}.Pcangsd" \
-  --sites-save --snp-weights --pcadapt --selection --iter 500 --maf-iter 1000
+  --sites-save --snp-weights --pcadapt --selection --iter 500 --maf-iter 1000 -e 4
 done
