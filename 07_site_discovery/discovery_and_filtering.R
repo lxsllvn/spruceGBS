@@ -1,3 +1,163 @@
+#' Write a UNIX-style TSV file.
+#'
+#' @param x Data.frame or tibble to write.
+#' @param out.name Output filename.
+#' @param ... Passed to write.table().
+#' @return Invisibly NULL.
+write.unix <- function(x, out.name, row.names = FALSE, col.names = FALSE,
+                       quote = FALSE, sep = "\t", ...) {
+  con <- file(out.name, "wb")
+  write.table(x, file = con, row.names = row.names, col.names = col.names,
+              quote = quote, sep = sep, ...)
+  close(con)
+  invisible(NULL)
+}
+
+#' Load sample list and add metadata.
+#'
+#' @param sample.list Path to sample list.
+#' @param metadata Metadata CSV file.
+#' @return Data.frame with merged metadata.
+get.info <- function(sample.list, metadata) {
+  indv.info <- read.table(paste0(sample.list))
+  colnames(indv.info)[1] <- "bam_code"
+  meta <- read.csv(paste0(metadata))
+  indv.info <- left_join(indv.info, 
+                         meta[,c("bam_code", "pop_code", "library", "domain", "region", 
+                                 "latitude", "longitude")])
+  return(indv.info)
+}
+
+#' Calculate and plot AUC-ROCs for multiple group/statistic sets
+#'
+#' This function calculates ROC curves and AUC values for multiple sets of group definitions and statistics.
+#' For each group definition, it constructs positive ("good") and negative ("bad") subsets of the data using filter expressions,
+#' computes ROC and AUC for each statistic, summarizes thresholds and performance, and optionally saves ROC plots to disk.
+#'
+#' @param dat Data frame. Input data containing all relevant variables for filtering and statistics.
+#' @param group_defs Named list. Each element defines a group set (e.g., "set1", "set2"), with elements \code{bad} and \code{good}
+#'   as filter expressions (strings) for the negative and positive classes, respectively.
+#'   Example: \code{list(myset = list(bad = "X < 1", good = "X >= 1"))}
+#' @param stats Character vector. Names of the columns in \code{dat} to use as test statistics for ROC/AUC.
+#' @param output_dir Character (optional). If supplied, ROC plots are saved to this directory (created if needed). If NULL, plots are printed to screen.
+#' @param output_file Character vector or list (optional). Named vector/list of output file names for plots, corresponding to names in \code{group_defs}.
+#'   If not specified, defaults to \code{"ROC_<setname>.png"}.
+#'
+#' @return A list with two elements:
+#'   \describe{
+#'     \item{summary}{A data frame summarizing, for each group and statistic: AUC, optimal threshold, sensitivity, specificity, and group medians.}
+#'     \item{plots}{A named list of \code{ggplot} ROC curve objects, one per group set.}
+#'   }
+#' @details
+#' Requires the \pkg{pROC}, \pkg{dplyr}, \pkg{purrr}, and \pkg{ggplot2} packages. The function expects
+#' that \code{dat} contains all columns used in \code{stats} and in the filter expressions.
+#' "Bad" and "good" group filter expressions are evaluated with \code{rlang::parse_expr()}.
+#'
+#' If \code{output_dir} is supplied, plots are saved and not printed.
+#' If \code{output_file} is provided, it should be a named vector/list mapping each set name to a file name.
+#' 
+#' @export
+do_auc <- function(
+    dat, 
+    group_defs,   # named list: each element is list(bad=filter_expr, good=filter_expr)
+    stats, 
+    output_dir = NULL,       # if non-NULL, saves plots to this dir and doesn't print them
+    output_file = NULL       # named character vector/list of output file names
+) {
+  library(pROC)
+  library(dplyr)
+  library(purrr)
+  library(ggplot2)
+  
+  all_results <- list()
+  all_plots <- list()
+  
+  for (setname in names(group_defs)) {
+    defs <- group_defs[[setname]]
+    df_bad  <- dat %>% filter(!!rlang::parse_expr(defs$bad))
+    df_good <- dat %>% filter(!!rlang::parse_expr(defs$good))
+    
+    df_bad$group <- 0 # bad (negative class)
+    df_good$group <- 1 # good (positive class)
+    snps <- bind_rows(df_bad, df_good)
+    
+    # Skip if not enough data
+    if (nrow(snps) == 0 || any(sapply(stats, function(s) all(is.na(snps[[s]]))))) next
+    
+    # ROC objects, tidy ROC curves, and summary table
+    roc_list <- lapply(stats, function(stat) roc(snps$group, snps[[stat]], quiet=TRUE))
+    names(roc_list) <- stats
+    
+    roc_df <- imap_dfr(roc_list, function(rocobj, stat) {
+      data.frame(
+        fpr = 1 - rocobj$specificities,
+        tpr = rocobj$sensitivities,
+        stat = stat,
+        auc = as.numeric(auc(rocobj)),
+        set = setname
+      )
+    })
+    
+    summary_df <- map_dfr(stats, function(stat) {
+      rocobj <- roc_list[[stat]]
+      best <- coords(rocobj, "best", ret = c("threshold", "sensitivity", "specificity"))
+      # Calculate medians for each group
+      med_good <- median(snps[[stat]][snps$group == 1], na.rm = TRUE)
+      med_bad  <- median(snps[[stat]][snps$group == 0], na.rm = TRUE)
+      tibble(
+        set = setname,
+        stat = stat,
+        auc = as.numeric(auc(rocobj)),
+        threshold = as.numeric(best["threshold"]),
+        sensitivity = as.numeric(best["sensitivity"]),
+        specificity = as.numeric(best["specificity"]),
+        median_good = med_good,
+        median_bad  = med_bad
+      )
+    })
+    
+    # ROC plot (multi-panel)
+    panel_titles <- summary_df %>% 
+      mutate(stat_auc = paste0(stat, " (AUC = ", round(auc, 3), ")"))
+    names(panel_titles$stat_auc) <- panel_titles$stat
+    p <- ggplot(roc_df, aes(x = fpr, y = tpr, color = stat)) +
+      geom_line(size = 1) +
+      geom_abline(linetype = "dashed", color = "grey") +
+      facet_wrap(~ stat, ncol = 2, labeller = as_labeller(panel_titles$stat_auc)) +
+      labs(
+        x = "False Positive Rate (1 - Specificity)",
+        y = "True Positive Rate (Sensitivity)",
+        title = paste0("ROC Curves for Each Statistic: ", setname)
+      ) +
+      theme_minimal() +
+      theme(legend.position = "none")
+    
+    if (!is.null(output_dir)) {
+      if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+      # Choose the filename
+      out_file <- if (!is.null(output_file) && !is.null(output_file[[setname]])) {
+        file.path(output_dir, output_file[[setname]])
+      } else {
+        file.path(output_dir, paste0("ROC_", setname, ".png"))
+      }
+      ggsave(out_file, plot = p, width = 9, height = 6, dpi = 300)
+      message("Saved: ", out_file)
+      # Don't print!
+    } else {
+      print(p)
+    }
+    
+    all_results[[setname]] <- summary_df
+    all_plots[[setname]] <- p
+  }
+  
+  # Combine all summary tables
+  summary_all <- bind_rows(all_results)
+  
+  return(list(summary = summary_all, plots = all_plots))
+}
+
+
 #' Analyze pairwise PC dissimilarities vs. geography/library using one covariance file.
 #'
 #' @param base.name Character: Basename for analysis (e.g. "northern_domain_filtered.ct5")
@@ -247,6 +407,65 @@ pca_selection <- function(
 #' )
 #'
 #' @export
+#' PCA biplot with flexible palettes and multi-panel support
+#'
+#' Produces biplots from a covariance matrix and sample info, colored by sample metadata.
+#' Handles flexible file naming, discrete or continuous fill variables, and multiple panels.
+#' Accepts color palettes as character vectors (e.g., from \code{paletteer_d} or \code{paletteer_c}).
+#' Auto-wraps palette vectors as lists if needed for single-panel plotting.
+#'
+#' @param cov_path Character. Path (or prefix) to covariance file (e.g. \code{"mysamples.Pcangsd.cov"}). Tries \code{.Pcangsd.cov} and \code{.cov} suffixes if needed.
+#' @param sample_list_path Character. Path to sample list file (passed to \code{get.info}).
+#' @param PCs Integer vector. Principal components to plot (default \code{c(1,2)}).
+#' @param fill_var Character vector. Metadata columns in sample info to color points by (e.g. \code{"library"}, \code{"region"}, \code{"latitude"}).
+#' @param fill_pal List or vector of palettes for coloring points (optional). Each entry can be a paletteer vector or custom color vector, e.g. \code{paletteer_d("ggsci::default_jama", 3)}. Auto-wrapped in a list if needed. Also accepts "Set1", "Set2", and "Set3" as presents; these are the Rcolorbrewer palettes of the same name but with yellow removed.
+#' @param point_args List. Named arguments to \code{geom_point} (e.g. \code{list(size=2, alpha=0.8)}).
+#' @param plot_title Character. Optional title for the plot.
+#' @param output_file Character. Optional filename to save PNG (if provided).
+#' @param output_dir Character. Output directory for PNGs (default current directory).
+#'
+#' @return A \code{ggplot} object, or a named list of ggplot objects if multiple PC pairs/panels.
+#'
+#' @details
+#' - Color palette length must match the number of unique levels in the fill variable if discrete.
+#' - Pass continuous palettes using \code{paletteer_c(..., n)}.
+#' - For multi-panel plots, supply \code{fill_pal} as a list of palettes matching \code{fill_var}.
+#' - If \code{fill_pal} is a vector, it is auto-wrapped in a list for you.
+#'
+#' @examples
+#' # Discrete fill (library)
+#' plot_pcas(
+#'   "mysamples.Pcangsd.cov",
+#'   "mysamples_sample_list.txt",
+#'   PCs = c(1,2),
+#'   fill_var = "library",
+#'   fill_pal = paletteer_d("ggsci::default_jama", 3),
+#'   point_args = list(size = 2, alpha = 0.85)
+#' )
+#'
+#' # Continuous fill (latitude)
+#' plot_pcas(
+#'   "mysamples.Pcangsd.cov",
+#'   "mysamples_sample_list.txt",
+#'   PCs = c(1,2),
+#'   fill_var = "latitude",
+#'   fill_pal = paletteer_c("viridis::plasma", 30),
+#'   point_args = list(size = 1.5, alpha = 0.8)
+#' )
+#'
+#' # Multi-panel: color by library and region with custom palettes
+#' plot_pcas(
+#'   "mysamples.Pcangsd.cov",
+#'   "mysamples_sample_list.txt",
+#'   PCs = c(1,2),
+#'   fill_var = c("library", "region"),
+#'   fill_pal = list(
+#'     paletteer_d("ggsci::default_jama", 3),
+#'     paletteer_d("nord::aurora", 3)
+#'   )
+#' )
+#'
+#' @export
 plot_pcas <- function(
     cov_path,
     sample_list_path,
@@ -262,8 +481,8 @@ plot_pcas <- function(
   require(dplyr)
   require(RColorBrewer)
   require(paletteer)
-  
-  # 1. Handle covariance file naming
+
+  # Handle covariance file naming
   test_paths <- c(
     cov_path,
     paste0(cov_path, ".Pcangsd.cov"),
@@ -274,60 +493,72 @@ plot_pcas <- function(
     if (file.exists(p)) { cov_file <- p; break }
   }
   if (is.null(cov_file)) stop("Covariance file not found with any naming convention: ", paste(test_paths, collapse=", "))
-  
-  # 2. Read sample and covariance
+
+  # Read sample and covariance
   samples <- get.info(sample_list_path, "sequenced_samples_metadata.csv")
   cov <- read.table(cov_file)
   colnames(cov) <- samples$bam_code
   rownames(cov) <- samples$bam_code
-  
-  # 3. PCA
+
+  # PCA
   eig <- eigen(cov)
   n_samples <- nrow(cov)
   max_pc <- min(n_samples, ncol(cov))
   n_pc_to_plot <- max(PCs)
   if (n_pc_to_plot > max_pc) stop("Requested PCs exceed the number of possible PCs.")
-  
-  # 4. Make PC matrix
+
+  # Make PC matrix
   pca_df <- cbind(
     samples,
     as.data.frame(eig$vectors[, seq_len(n_pc_to_plot), drop=FALSE])
   )
   colnames(pca_df)[(ncol(pca_df)-n_pc_to_plot+1):ncol(pca_df)] <- paste0("PC", 1:n_pc_to_plot)
-  
-  # 5. Chunk PCs into pairs
+
+  # Chunk PCs into pairs
   pc_pairs <- split(PCs, ceiling(seq_along(PCs)/2))
   if (length(pc_pairs[[length(pc_pairs)]]) == 1) {
     warning("Last PC chunk only has 1 PC. Skipping it.")
     pc_pairs <- pc_pairs[sapply(pc_pairs, length) == 2]
   }
   if (length(pc_pairs) == 0) stop("No valid PC pairs to plot.")
-  
-  # 6. Palette presets for when fill_pal is NULL only
+
+  # Palette presets for when fill_pal is NULL only
   presets <- list(
     Set1 = setdiff(brewer.pal(9, "Set1"), "#FFFF33"),
     Set2 = brewer.pal(8, "Set2"),
     Set3 = setdiff(brewer.pal(12, "Set3"), c("#FFFFB3","#FFED6F"))
   )
-  
+
+  # --- Palette logic ---
+  # Make fill_pal a list with one palette per fill_var if it isn't already
+  if (!is.null(fill_pal) && !is.list(fill_pal)) {
+    fill_pal <- rep(list(fill_pal), length(fill_var))
+  }
+  # For NULL, fill with NULLs
+  if (is.null(fill_pal)) {
+    fill_pal <- rep(list(NULL), length(fill_var))
+  }
+
   # Helper for palette selection
   get_palette <- function(var, pal) {
     is_discrete <- !is.numeric(pca_df[[var]])
-    # If pal is one of the preset names, return preset colors
-    if (is.character(pal) && pal %in% names(presets)) {
+    # If pal is a preset name, use that
+    if (!is.null(pal) && is.character(pal) && length(pal) == 1 && pal %in% names(presets)) {
       return(presets[[pal]])
     }
-    if (!is.null(pal)) {
+    # If pal is a character vector (multiple colors), use as is
+    if (!is.null(pal) && (is.character(pal) || is.numeric(pal))) {
       return(as.character(pal))
     }
+    # Defaults
     if (is_discrete) {
       return(presets$Set3)
     } else {
       return(as.character(paletteer_c("grDevices::Viridis", 30)))
     }
   }
-  
-  # 7. Plotting
+
+  # Plotting
   all_plots <- list()
   for (pc_idx in seq_along(pc_pairs)) {
     pcs <- pc_pairs[[pc_idx]]
@@ -336,10 +567,20 @@ plot_pcas <- function(
     plot_list <- list()
     for (j in seq_along(fill_var)) {
       var <- fill_var[j]
-      pal <- if (!is.null(fill_pal) && length(fill_pal) >= j) fill_pal[[j]] else NULL
-      pal_vec <- get_palette(var, pal)
+      pal_vec <- get_palette(var, fill_pal[[j]])
       is_discrete <- !is.numeric(pca_df[[var]])
       mapping <- aes_string(x = x_pc, y = y_pc, col = var)
+
+      # Theme tweaks: only set legend key sizes for discrete
+      legend_theme <- if (is_discrete) {
+        theme(
+          legend.key.height = unit(6, "pt"),
+          legend.key.width = unit(6, "pt")
+        )
+      } else {
+        theme()
+      }
+
       g <- ggplot(pca_df, mapping) +
         do.call(geom_point, c(list(), point_args)) +
         theme_minimal(base_size = 8) +
@@ -352,14 +593,18 @@ plot_pcas <- function(
           legend.margin = margin(0,0,0,0),
           legend.box.margin = margin(0, 0, 0, 0),
           legend.spacing.y = unit(0, "pt"),
-          legend.key.height = unit(6, "pt"),
-          legend.key.width = unit(6, "pt"),
           panel.spacing = margin(0, 3, 0, 3, unit = "mm"),
           legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
           plot.title = element_text(size=10),
           plot.margin = margin(0, 1, 0, 1, unit = "mm")
         ) +
-        guides(colour = guide_legend(override.aes = list(size=1.5)))
+        legend_theme  # Add discrete-specific theme tweaks
+
+      # Add discrete guide if needed
+      if (is_discrete) {
+        g <- g + guides(colour = guide_legend(override.aes = list(size=1.5)))
+      }
+
       if (!is.null(plot_title) && j == 1) {
         g <- g + ggtitle(plot_title)
       }
@@ -370,17 +615,6 @@ plot_pcas <- function(
         group_levels <- sort(unique(pca_df[[var]]))
         n_groups <- length(group_levels)
         pal_final <- as.character(pal_vec)
-        # If length is 1 but n_groups > 1, assume user forgot to set n
-        if (length(pal_final) == 1 && n_groups > 1) {
-          # Try to "re-call" paletteer with n_groups if possible (parse string)
-          try_palette <- try(eval(parse(text = pal_final)), silent = TRUE)
-          if (inherits(try_palette, "colors")) {
-            pal_final <- as.character(try_palette(n_groups))
-          } else {
-            # Otherwise, repeat color to needed length (fallback)
-            pal_final <- rep(pal_final, n_groups)
-          }
-        }
         if (length(pal_final) < n_groups) {
           stop(sprintf("Palette has %d colors but %d are needed for '%s'", length(pal_final), n_groups, var))
         }
@@ -406,8 +640,8 @@ plot_pcas <- function(
       }
     }
     all_plots[[paste0("PCs", pcs[1], "and", pcs[2])]] <- final_plot
-    
-    # 8. Save output if requested
+
+    # Save output if requested
     if (!is.null(output_file)) {
       dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
       save_file <- if (length(pc_pairs) == 1) {
@@ -426,3 +660,63 @@ plot_pcas <- function(
   return(all_plots)
 }
 
+
+#' Create and (optionally) save an UpSet plot
+#'
+#' Generates an UpSet plot (visualizing set intersections) from a named list of character vectors (each representing a group).
+#' If \code{output_file} is supplied, the plot is saved as a PNG in \code{output_dir} and nothing is rendered to the screen.
+#' If \code{output_file} is \code{NULL}, the ggplot object is returned for further display or modification.
+#'
+#' @param upset.list A named list of character vectors, each vector giving the members of a set/group.
+#' @param output_dir Directory to save the plot if \code{output_file} is provided (default: current directory).
+#' @param output_file Optional file name for PNG output (do not include directory; see \code{output_dir}).
+#'
+#' @return If \code{output_file} is \code{NULL}, returns a ggplot object representing the UpSet plot. Otherwise, saves the plot to file and returns \code{NULL} (invisibly).
+#'
+#' @import UpSetR
+#' @importFrom cowplot plot_grid
+#' @importFrom ggplot2 ggsave
+#' @examples
+#' \dontrun{
+#' # Example list of sets
+#' sets <- list(
+#'   groupA = c("gene1", "gene2", "gene3"),
+#'   groupB = c("gene2", "gene3", "gene4"),
+#'   groupC = c("gene3", "gene4", "gene5")
+#' )
+#' # Display plot in RStudio
+#' plot.Upset(sets)
+#' # Save plot to file
+#' plot.Upset(sets, output_dir = "plots", output_file = "example_upset")
+#' }
+plot.Upset <- function(upset.list,
+                       output_dir = ".",
+                       output_file = NULL) {
+  require(UpSetR)
+  f <- fromList(upset.list)
+  u <- upset(f,
+             sets = colnames(f),
+             order.by = "freq",
+             nintersects = 15,
+             text.scale = 1,
+             point.size = 2.0,
+             keep.order = TRUE,
+             decreasing = TRUE)
+  
+  uplot <- plot_grid(u$Main_bar,
+                     NULL,
+                     u$Matrix,
+                     nrow = 3,
+                     align = 'v',
+                     rel_heights = c(3, 0.25, 2),
+                     rel_widths = c(4, 0, 4))
+  
+  if (!is.null(output_file)) {
+    dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+    save_file <- file.path(output_dir, paste0(sub("\\.png$","",output_file), ".png"))
+    ggsave(filename = save_file, plot = uplot, width = 4, height = 5, dpi = 300, bg = "white")
+    return(invisible(NULL))
+  } else {
+    return(uplot)
+  }
+}
