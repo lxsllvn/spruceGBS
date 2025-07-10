@@ -530,32 +530,42 @@ plot_stat_distributions <- function(
 #' @param plot_type Type ("core", "extended", "pop").
 #' @param output_dir Output directory.
 #' @param output_file Output file name.
+#' @param fill_fun Function to summarize results; default is mean
 plot_indvhet <- function(
     df,
     fill_var    = "iqr_het",
     plot_type   = c("core", "extended", "pop"),
     output_dir  = NULL,
-    output_file = NULL
+    output_file = NULL,
+    fill_fun    = mean  
 ) {
   plot_type <- match.arg(plot_type)
   if (plot_type == "core") {
     df_plot <- df %>% 
       filter(minMapQ != 50) %>%
       filter(clipC %in% c("0", "50")) %>%
-      mutate(C_ct = paste0("c: ", clipC, " / ct: ", call_thresh))
-    p <- ggplot(df_plot, aes(x = minQ, y = minMapQ, fill = .data[[fill_var]])) +
+      mutate(C_ct = paste0("c: ", clipC, " / ct: ", call_thresh)) %>%
+      group_by(minQ, minMapQ, baq, C_ct) %>%
+      summarise(fill_value = fill_fun(.data[[fill_var]], na.rm = TRUE), .groups = "drop")
+    p <- ggplot(df_plot, aes(x = minQ, y = minMapQ, fill = fill_value)) +
       geom_tile(linetype = "blank") +
       facet_grid(baq ~ C_ct, labeller = label_value)
   }
   if (plot_type == "extended") {
-    df_plot <- df %>% filter(baq == "baq: 0")
-    p <- ggplot(df_plot, aes(x = minQ, y = minMapQ, fill = .data[[fill_var]])) +
+    df_plot <- df %>%
+      filter(baq == "baq: 0") %>%
+      group_by(minQ, minMapQ, clipC, call_thresh) %>%
+      summarise(fill_value = fill_fun(.data[[fill_var]], na.rm = TRUE), .groups = "drop")
+    p <- ggplot(df_plot, aes(x = minQ, y = minMapQ, fill = fill_value)) +
       geom_tile(linetype = "blank") +
       facet_grid(clipC ~ call_thresh, labeller = label_value)
   }
   if (plot_type == "pop") {
-    df_plot <- df %>% filter(baq == "baq: 0", call_thresh == "6", clipC %in% c("0", "60", "75", "100"))
-    p <- ggplot(df_plot, aes(x = minQ, y = pop_code, fill = .data[[fill_var]])) +
+    df_plot <- df %>%
+      filter(baq == "baq: 0", call_thresh == "6", clipC %in% c("0", "60", "75", "100")) %>%
+      group_by(minQ, pop_code, clipC, minMapQ) %>%
+      summarise(fill_value = fill_fun(.data[[fill_var]], na.rm = TRUE), .groups = "drop")
+    p <- ggplot(df_plot, aes(x = minQ, y = pop_code, fill = fill_value)) +
       geom_tile(linetype = "blank") +
       facet_grid(clipC ~ minMapQ, labeller = label_value)
   }
