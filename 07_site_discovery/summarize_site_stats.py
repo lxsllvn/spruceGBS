@@ -113,7 +113,7 @@ def main():
                 snpstat_row = ['NA'] * 11
 
             out.write('\t'.join([str(x) for x in row + snpstat_row]) + '\n')
-            if MAF[i] > 0.05:
+            if MAF[i] > 0.05 and MAF[i] < 0.95:
                 out_maf05.write('\t'.join([str(x) for x in row + snpstat_row]) + '\n')
 
             if (i+1) % 50000 == 0:
