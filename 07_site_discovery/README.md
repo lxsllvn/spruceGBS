@@ -12,10 +12,7 @@ interesting analytical choices are really only made in seleciton of site-level f
 
 # Contents
 
-* [Create ANGSD reference assembly](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
-  * [Split assembly](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
-  * [Site discovery](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
-  * [Create final ANGSD reference](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
+* [Create ANGSD reference assemblies](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
 * [Calculate genotype likelihoods](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
 * [Site and sample quality filters](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
   * [Site-level filters](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
@@ -28,7 +25,7 @@ interesting analytical choices are really only made in seleciton of site-level f
 
 # Scripts
 
-* **`make_reduced_reference.sh`**: does stuff
+* **`split_reference.sh`**: does stuff
 * **`domain_site_discovery.sh`**: does stuff
 * **`prepare_angsd_ref.sh`**: does stuff
 * **`angsd_likelihoods.sh`**: does stuff
@@ -46,62 +43,82 @@ interesting analytical choices are really only made in seleciton of site-level f
 * **`library_call_thresholds.sh`**: does stuff
 * **`pcangsd_batch_effects.R`**: does stuff
 
-
-
 ---
 
-# Create ANGSD reference assembly
+# Create ANGSD reference assemblies
 
-Preparing the reference is again a three-step procedure. 
-First make the reduced reference subsets as previously, but this time with all target regions. Then, do site discovery to find sites that meet the filtering criteria in each domain. Next, collect all the sites over the subsets and create a single merged reference for each domain. 
+In Step 02 Reduced reference genome preparation, we identified regions in the *P. abies* assembly that are on scaffolds with mapped reads and outside of annotated repeats (+/- 500 bp), resulting in ~519 Mb across more than 100,000 scaffolds. ANGSD isn't designed to handle a dataset of this size, but we can further reduce the computational overhead by limiting analyses to sites passing some basic quality filters.
 
-## Split assembly
+Creating the reduced references follows the same three-step process used in 05 ANGSD parameter testing#Experimental design:
 
-### `make_reduced_reference.sh` usage
+1. `split_reference.sh`: Divides `picea_newref_target_regions.bed` into 23 subsets, extracts and indexes their FASTA records, and prepares their corresponding ANGSD site and region files. There’s nothing special about 23; based on trial runs before running out of memory, ANGSD could analyze ~5,000 scaffolds (+/- 15%) and 300 samples using ~36 Gb of memory, which is convenient for our cluster.
+
+2. `domain_site_discovery.sh`: Runs ANGSD using the quality filters identified in the parameter sweep (`-minQ 20 -minMapQ 50 -C 100 -baq 0`) and finds sites with <60% missing data. The missing data cutoff is somewhat arbitrary; the goal is simply to make the reference small enough for analysis while leaving some leeway to optimize sample vs. site-level missing data.
+
+3. `prepare_angsd_ref.sh`: Merges the passing sites and produces a single indexed FASTA and ANGSD site and region file.
+
+
+## `split_reference.sh` usage
 
 ```bash
 #!/bin/bash
-sbatch solve_all_my_problems.sh
-
+$SCRIPTS/07_site_discovery/split_reference.sh \
+ <outdir> \
+ <reference.bed> \
+ <reference.fa>
 ```
-
 **Inputs**
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
+  * `<outdir>`: Output directory for results
+  * `<reference.bed>`: BED file with target regions
+  * `<reference.fa>`: Reference genome FASTA file
 
 **Outputs**
   * `\<path/to/output1\>`: Description of the generated output.
   * `\<path/to/output2\>`: ...
 
-## Site discovery
-
-### `domain_site_discovery.sh` usage
+## `domain_site_discovery.sh` usage
 
 ```bash
 #!/bin/bash
-sbatch solve_all_my_problems.sh
-
+$SCRIPTS/07_site_discovery/domain_site_discovery.sh \
+ <index> \
+ <domain> \
+ <bamlist> \
+ <path/to/reference/subsets> \
+ <outdir>
 ```
-**Inputs**
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
 
+**Inputs**
+  * `<index>`: numerical index denoting the 01...23 reference subset
+  * `<domain>`: name of genetic domain, e.g. southern, northern, siberia. 
+  * `<bamlist>`: file containing the paths to bam files to include in the analysis
+  * `<path/to/reference/subsets>`:  path to \*.fa, \*\_region and \*\_site files for the reference subsets
+  * `<outdir>`: desired output directory; will create if it doesn't exist
+    
 **Outputs**
   * `\<path/to/output1\>`: Description of the generated output.
   * `\<path/to/output2\>`: ...
 
-## Create final ANGSD reference
 
-### `prepare_angsd_ref.sh` usage
+## `prepare_angsd_ref.sh` usage
+
+Has --splits/--sites modes. 
 
 ```bash
 #!/bin/bash
-sbatch solve_all_my_problems.sh
-
+$SCRIPTS/07_site_discovery/prepare_angsd_ref.sh \
+ --splits \
+ <domain>
+ <input>
+ <ref>
+ <outdir>
 ```
+
 **Inputs**
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
+  * `<domain>`:   sample domain (e.g., southern)
+  * `input>`:    directory containing *.pos.gz lists (e.g., southern_pt_01.pos.gz, etc)
+  * `<ref>`:  path to reference genome FASTA (indexed for samtools
+  * `<outdir>`:   directory to save merged .bed, .sites, .regions, .fa files
 
 **Outputs**
   * `\<path/to/output1\>`: Description of the generated output.
