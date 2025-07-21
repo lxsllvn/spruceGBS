@@ -47,9 +47,9 @@ interesting analytical choices are really only made in seleciton of site-level f
 
 # Create ANGSD reference assemblies
 
-In Step 02 Reduced reference genome preparation, we identified regions in the *P. abies* assembly that are on scaffolds with mapped reads and outside of annotated repeats (+/- 500 bp), resulting in ~519 Mb across more than 100,000 scaffolds. ANGSD isn't designed to handle a dataset of this size, but we can further reduce the computational overhead by limiting analyses to sites passing some basic quality filters.
+In [Step 2: Reduced reference genome preparation](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref), we identified regions in the *P. abies* assembly that are on scaffolds with mapped reads and outside of annotated repeats (+/- 500 bp), resulting in ~519 Mb across more than 100,000 scaffolds. ANGSD isn't designed to handle a dataset of this size, but we can further reduce the computational overhead by limiting analyses to sites passing some basic quality filters.
 
-Creating the reduced references follows the same three-step process used in 05 ANGSD parameter testing#Experimental design:
+Creating the reduced references follows the same three-step process used in [the scaffold selection for the parameter sweep](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref):
 
 1. `split_reference.sh`: Divides `picea_newref_target_regions.bed` into 23 subsets, extracts and indexes their FASTA records, and prepares their corresponding ANGSD site and region files. There’s nothing special about 23; based on trial runs before running out of memory, ANGSD could analyze ~5,000 scaffolds (+/- 15%) and 300 samples using ~36 Gb of memory, which is convenient for our cluster.
 
