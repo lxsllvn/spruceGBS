@@ -31,8 +31,6 @@ interesting analytical choices are really only made in seleciton of site-level f
 * **`angsd_likelihoods.sh`**: does stuff
 * **`summarize_site_stats.py`**: does stuff
 * **`summarize_site_stats.sh`**: does stuff
-* **`auc_roc_filter.R`**: does stuff
-* **`snp_stats_filter.awk`**: does stuff
 * **`codeconvert`**: does stuff
 * **`sample_call_rates.sh`**: does stuff
 * **`reheader_genotype_matrix.py`**: does stuff
@@ -40,8 +38,8 @@ interesting analytical choices are really only made in seleciton of site-level f
 * **`reheader_genotype_matrix.sh`**: does stuff
 * **`subset_genotype_matrix.sh`**: does stuff
 * **`library_call_thresh.R`**: does stuff
-* **`library_call_thresholds.sh`**: does stuff
-* **`pcangsd_batch_effects.R`**: does stuff
+* **`batch_effects.sh`**: does stuff
+* **`discovery_and_filtering.R`**: does stuff
 
 ---
 
