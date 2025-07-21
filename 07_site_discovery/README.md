@@ -173,35 +173,64 @@ sbatch solve_all_my_problems.sh
 
 can any of the quality/depth metrics reliably distinguish egregiously bad from 'at least not awful' sites?
 
-```bash
-#!/bin/bash
-sbatch solve_all_my_problems.sh
+```R
+source("discovery_and_filtering.R")
 
+# Define group definitions using quoted logical expressions
+group_defs <- list(
+  posF = list(bad = "F > 0.5", good = "F < 0.5 & F > -0.5"),
+  negF = list(bad = "F < -0.5", good = "F < 0.5 & F > -0.5"),
+  Hobs = list(bad = "Hobs > 0.5", good = "Hobs < 0.5")
+)
+
+# Statistics to evaluate
+stats <- c("total_depth", "mean_depth", "median_depth", "cv_depth", "rel_IQR_depth", "call_rate")
+
+# Domain names to iterate over
+domains <- c("northern_pt_aa", "northern_pt_ab", "northern_pt_ac", "southern", "siberia")
+
+# List to collect summaries from all domains
+all_summaries <- list()
+
+for (dom in domains) {
+  dat <- read.table(paste0(dom, "_site_summary_maf05.tsv"), header = TRUE)
+  
+  # Construct output filenames for each group_def
+  output_file <- setNames(
+    paste0(dom, "_", names(group_defs), "_site_filters_ROCs.png"),
+    names(group_defs)
+  )
+  
+  res <- do_auc(
+    dat,
+    group_defs, 
+    stats,
+    output_dir = "rocs",
+    output_file = output_file
+  )
+  
+  # Add domain info and store summary
+  if (!is.null(res$summary) && nrow(res$summary) > 0) {
+    res$summary$domain <- dom
+    all_summaries[[dom]] <- res$summary
+  }
+}
+
+# Combine all summaries into a single data.frame
+summary_all_domains <- do.call(rbind, all_summaries)
+
+# Write output to CSV (no row names, no quotes)
+write.csv(
+  summary_all_domains, 
+  file = "site_filters_AUC_results.csv", 
+  row.names = FALSE, 
+  quote = FALSE
+)
 ```
-**Inputs**
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
 
-**Outputs**
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
 
-### `snp_stats_filter.awk` usage
 
-outputs a list of snpcodes passing the filters. not sure that a big awk script is really needed here, but this script accepts column names and correctly returns sites meeting all conditions and ignores -nan/nan/inf/-inf 
 
-```bash
-#!/bin/bash
-sbatch solve_all_my_problems.sh
-
-```
-**Inputs**
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
-
-**Outputs**
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
 
 ### `codeconvert` usage
 
