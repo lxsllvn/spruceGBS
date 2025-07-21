@@ -228,10 +228,6 @@ write.csv(
 )
 ```
 
-
-
-
-
 ### `codeconvert` usage
 
 
@@ -309,7 +305,7 @@ finds sites meeting minimum library call rate thresholds, creates beagle subsets
 
 note! need pcangsd 1.34.6; the pcadapt-zscores in at least some previous versions are in the wrong order; i.e. column 1 doesn't have the z-scores for PC1. 
 
-## `library_call_thresholds.sh` usage
+## `batch_effects.sh` usage
 
 ```bash
 #!/bin/bash
@@ -327,18 +323,96 @@ sbatch solve_all_my_problems.sh
 
 ## `pcangsd_batch_effects.R`
 
-```bash
-#!/bin/bash
-sbatch solve_all_my_problems.sh
+
+```R
+source("discovery_and_filtering.R")
+# PCA biplots
+# Note: "sequenced_samples_metadata.csv" must be in the working directory
+
+domains <- c("northern", "siberia", "southern")
+
+# Generate PCA biplots for all domains and call thresholds
+for (domain in domains) {
+  base.names <- paste0(domain, ".ct", 5:8)
+  for (base.name in base.names) {
+    plot_pcas(
+      cov_path = base.name,
+      sample_list_path = paste0(domain, "_batch_samples.txt"),
+      PCs = 1:10,
+      fill_var = c("library", "region"),
+      fill_pal = list("Set3", "Set1"),
+      point_args = list(size = 1.5, alpha = 0.8),
+      output_file = base.name
+    )
+  }
+}
+
+# Analyze pairwise PC dissimilarities vs. geographic distance and 
+# binary library indicator ("same" or "different" library)
+meta <- read.csv("sequenced_samples_metadata.csv")
+
+all_domains_results <- list()
+
+for (domain in domains) {
+  base.names <- paste0(domain, ".ct", 5:8)
+  res <- bind_rows(
+    lapply(base.names, function(bn) {
+      analyze_pca_distance_predictors(
+        bn,
+        paste0(domain, "_batch_samples.txt"),
+        meta,
+        n_pcs = 10
+      )
+    })
+  ) %>% mutate(domain = domain)
+  all_domains_results[[domain]] <- res
+}
+
+# Combine, sort, and format results
+summary_table <- bind_rows(all_domains_results) %>%
+  mutate(PC_num = as.integer(gsub("PC", "", PC))) %>%
+  arrange(domain, PC_num, base.name, t_value) %>%
+  select(-PC_num) %>%
+  mutate(
+    t_value = round(t_value, 2),
+    p_value = formatC(p_value, format = "e", digits = 2)
+  )
+
+write.csv(
+  summary_table,
+  "PCA_batch_effects.csv",
+  row.names = FALSE
+)
+
+# Identify SNPs contributing most to PCs dominated by batch effects
+k_values <- c(siberia = 3, northern = 3, southern = 3)
+
+for (domain in c("siberia", "southern", "northern")) {
+  k <- k_values[[domain]]
+  for (i in 5:8) {
+    res <- pca_selection(
+      basename = paste0(domain, ".ct", i),
+      K = k,
+      mode = "univariate",
+      files = list(
+        sites = paste0(domain, "_call_thresh0.", i),
+        pca_sites = paste0(domain, ".ct", i, ".Pcangsd.sites"),
+        pcadapt_zscores = paste0(domain, ".ct", i, ".Pcangsd.pcadapt.zscores"),
+        selection = paste0(domain, ".ct", i, ".Pcangsd.selection")
+      )
+    )
+    
+    pc_name <- paste0("pcadapt", k, ".BH")
+    sel_name <- paste0("selection", k, ".BH")
+    
+    write.unix(
+      res$snpcode[res[[pc_name]] < 0.05 | res[[sel_name]] < 0.05],
+      paste0(domain, "_ct", i, "k", k, "_Pcangsd_blacklist.txt")
+    )
+  }
+}
 
 ```
-**Inputs**
-  * `\<path/to/input1\>`: Description of the expected input file or directory.
-  * `\<path/to/input2\>`: ...
-
-**Outputs**
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
 
 
 # Dependencies
