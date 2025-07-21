@@ -25,9 +25,9 @@ interesting analytical choices are really only made in seleciton of site-level f
 
 # Scripts
 
-* **`split_reference.sh`**: does stuff
-* **`domain_site_discovery.sh`**: does stuff
-* **`prepare_angsd_ref.sh`**: does stuff
+* **`split_reference.sh`**: divides reference genome into subsets, creating indexed FASTA files and corresponding ANGSD region/site files
+* **`domain_site_discovery.sh`**: runs ANGSD on each reference subset per domain and finds sites passing minimal quality filters
+* **`prepare_angsd_ref.sh`**: concatenates filtered position files and prepares final domain-specific region, site, and indexed fasta files
 * **`angsd_likelihoods.sh`**: does stuff
 * **`summarize_site_stats.py`**: does stuff
 * **`summarize_site_stats.sh`**: does stuff
