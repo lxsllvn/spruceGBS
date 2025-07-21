@@ -26,8 +26,8 @@ interesting analytical choices are really only made in seleciton of site-level f
 # Scripts
 
 * **`split_reference.sh`**: divides reference genome into subsets, creating indexed FASTA files and corresponding ANGSD region/site files
-* **`domain_site_discovery.sh`**: runs ANGSD on each reference subset per domain and finds sites passing minimal quality filters
-* **`prepare_angsd_ref.sh`**: concatenates filtered position files and prepares final domain-specific region, site, and indexed fasta files
+* **`site_discovery.sh`**: runs ANGSD on each reference subset and finds sites passing minimal quality filters
+* **`prepare_angsd_ref.sh`**: concatenates filtered position files and prepares final region, site, and indexed fasta files
 * **`angsd_likelihoods.sh`**: does stuff
 * **`summarize_site_stats.py`**: does stuff
 * **`summarize_site_stats.sh`**: does stuff
@@ -53,7 +53,7 @@ Creating the reduced references follows the same three-step process used in [the
 
 1. `split_reference.sh`: Divides `picea_newref_target_regions.bed` into 23 subsets, extracts and indexes their FASTA records, and prepares their corresponding ANGSD site and region files. There’s nothing special about 23; based on trial runs before running out of memory, ANGSD could analyze ~5,000 scaffolds (+/- 15%) and 300 samples using ~36 Gb of memory, which is convenient for our cluster.
 
-2. `domain_site_discovery.sh`: Runs ANGSD using the quality filters identified in the parameter sweep (`-minQ 20 -minMapQ 50 -C 100 -baq 0`) and finds sites with <60% missing data. The missing data cutoff is somewhat arbitrary; the goal is simply to make the reference small enough for analysis while leaving some leeway to optimize sample vs. site-level missing data.
+2. `site_discovery.sh`: Runs ANGSD using the quality filters identified in the parameter sweep (`-minQ 20 -minMapQ 50 -C 100 -baq 0`) and finds sites with <60% missing data. The missing data cutoff is somewhat arbitrary; the goal is simply to make the reference small enough for analysis while leaving some leeway to optimize sample vs. site-level missing data.
 
 3. `prepare_angsd_ref.sh`: Merges the passing sites and produces a single indexed FASTA and ANGSD site and region file.
 
@@ -76,7 +76,7 @@ $SCRIPTS/07_site_discovery/split_reference.sh \
   * `\<path/to/output1\>`: Description of the generated output.
   * `\<path/to/output2\>`: ...
 
-## `domain_site_discovery.sh` usage
+## `site_discovery.sh` usage
 
 ```bash
 #!/bin/bash
