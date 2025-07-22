@@ -128,8 +128,8 @@ $SCRIPTS/07_site_discovery/prepare_angsd_ref.sh \
  --splits \
  "southern" \
  "${SPRUCE_PROJECT}/ref/subsets/southern" \
- "$SPRUCE_PROJECT/ref/picea_newref.fa" \
- "$SPRUCE_PROJECT/ref/southern"
+ "${SPRUCE_PROJECT}/ref/picea_newref.fa" \
+ "${SPRUCE_PROJECT}/ref/southern"
 ```
 
 **Inputs**
