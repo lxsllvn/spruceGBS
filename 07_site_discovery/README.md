@@ -45,83 +45,109 @@ interesting analytical choices are really only made in seleciton of site-level f
 
 # Create ANGSD reference assemblies
 
-In [Step 2: Reduced reference genome preparation](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref), we identified regions in the *P. abies* assembly that are on scaffolds with mapped reads and outside of annotated repeats (+/- 500 bp), resulting in ~519 Mb across more than 100,000 scaffolds. ANGSD isn't designed to handle a dataset of this size, but we can further reduce the computational overhead by limiting analyses to sites passing some basic quality filters.
+In [Step 2: Reduced reference genome preparation](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref), we identified scaffolds with reads and, from these, designated target regions that fall outside of annotated repeats. These target regions comprise ~519 Mb across 100,000 scaffolds, a substantial reduction from the 12.4 Gb and 10,253,694 scaffolds of the original assembly, but still far too large for ANGSD to manage. 
 
-Creating the reduced references follows the same three-step process used in [the scaffold selection for the parameter sweep](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref):
+Here, we repeat the methods used to create an ANGSD-friendly reference for the [the parameter sweep](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref), this time using all target regions and all samples that passed [initial quality control](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc). Our goal is simply to remove sites that fail some minimal call rate and quality filters, with some leeway for further parameter optimization. 
+
+Creating ANGSD-ready references is a three-step process:
 
 1. `split_reference.sh`: Divides `picea_newref_target_regions.bed` into 23 subsets, extracts and indexes their FASTA records, and prepares their corresponding ANGSD site and region files. There’s nothing special about 23; based on trial runs before running out of memory, ANGSD could analyze ~5,000 scaffolds (+/- 15%) and 300 samples using ~36 Gb of memory, which is convenient for our cluster.
 
 2. `site_discovery.sh`: Runs ANGSD using the quality filters identified in the parameter sweep (`-minQ 20 -minMapQ 50 -C 100 -baq 0`) and finds sites with <60% missing data. The missing data cutoff is somewhat arbitrary; the goal is simply to make the reference small enough for analysis while leaving some leeway to optimize sample vs. site-level missing data.
 
-3. `prepare_angsd_ref.sh`: Merges the passing sites and produces a single indexed FASTA and ANGSD site and region file.
+3. `prepare_angsd_ref.sh`: Merges the passing sites and produces a single indexed fasta and ANGSD site and region file.
 
+This process is applied to each domain separately to enable detection of private loci that may occur due to recognition site mutations. 
+
+For the southern and Siberian domains, all samples (~300 each) were analyzed simultaneously to produce a single ANGSD reference per domain. To reduce the memory requirements for the northern domain, we divided the 775 samples in three groups and processed each separately. The resulting northern_pt_aa, northern_pt_ab, and northern_pt_ac references were analyzed seperately until after the site filtering stage. 
+
+```bash
+#!/bin/bash
+shuf northern_bamlist.txt > tmp_shuf.txt
+split -n l/3 --additional-suffix .txt tmp_shuf.txt northern_bamlist_pt_
+rm tmp_shuf.txt
+```
 
 ## `split_reference.sh` usage
 
 ```bash
 #!/bin/bash
 $SCRIPTS/07_site_discovery/split_reference.sh \
- <outdir> \
- <reference.bed> \
- <reference.fa>
+    "$SPRUCE_PROJECT/ref/subsets" \
+    "$SPRUCE_PROJECT/ref/picea_newref_target_regions.bed" \
+    "$SPRUCE_PROJECT/ref/picea_newref.fa"
 ```
+
 **Inputs**
-  * `<outdir>`: Output directory for results
-  * `<reference.bed>`: BED file with target regions
-  * `<reference.fa>`: Reference genome FASTA file
+- `$1` - output directory for results
+- `$2` - [target region BED file](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
+- `$3` - [indexed reference fasta](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
 
 **Outputs**
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
+For each chunk:
+- `target_scaffs_pt_{01..23}.bed` - BED coordinates
+- `target_scaffs_pt_{01..23}.fa` - fasta records
+- `target_scaffs_pt_{01..23}.fa.fai` - fasta index
+- `target_scaffs_pt_{01..23}_regions` - ANGSD region file
+- `target_scaffs_pt_{01..23}_sites` -  ANGSD sites file
+- `target_scaffs_pt_{01..23}_sites.bin` - ANGSD sites index
+- `target_scaffs_pt_{01..23}_sites.idx` - ANGSD sites index
 
 ## `site_discovery.sh` usage
 
 ```bash
 #!/bin/bash
-$SCRIPTS/07_site_discovery/domain_site_discovery.sh \
- <index> \
- <domain> \
- <bamlist> \
- <path/to/reference/subsets> \
- <outdir>
+for i in {01..23}; do
+	"$SCRIPTS/07_site_discovery/site_discovery.sh" \
+	"$i" \
+	"southern" \
+ "${SPRUCE_PROJECT}/site_discovery/southern_bamlist.txt" \
+ "${SPRUCE_PROJECT}/ref/subsets" \
+ "${SPRUCE_PROJECT}/ref/subsets/southern"
+done
 ```
 
 **Inputs**
-  * `<index>`: numerical index denoting the 01...23 reference subset
-  * `<domain>`: name of genetic domain, e.g. southern, northern, siberia. 
-  * `<bamlist>`: file containing the paths to bam files to include in the analysis
-  * `<path/to/reference/subsets>`:  path to \*.fa, \*\_region and \*\_site files for the reference subsets
-  * `<outdir>`: desired output directory; will create if it doesn't exist
+- `$1` - index denoting the `01, ..., 23` chunk
+- `$2` - domain or sample group (e.g. `southern`, `northern_pt_aa`)
+- `$3` - path to the BAM list file (list of input BAMs)
+- `$4` - path to directiory with the `*.fa`, `*.fai`, `*_region` and `*_site` files created by `split_reference.sh`
+- `$5` - output directory; will create if it doesn't exist
     
 **Outputs**
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
-
+- `${DOMAIN}/${DOMAIN}_pt_{01..23}.counts.gz` - read count matrices for each chunk
+- `${DOMAIN}/${DOMAIN}_pt_{01..23}.pos.gz` - scaffold and position names for each chunk
 
 ## `prepare_angsd_ref.sh` usage
 
-Has --splits/--sites modes. 
+In the final step, `prepare_angsd_ref.sh` in `--splits` mode creates the merged reference and associated files. When `--splits` mode is invoked, the script takes a directory containing multiple `*.pos.gz` files (i.e., the files created by `site_discovery.sh`) and converts each to BED format, merges and sorts them into a master BED, creates the ANGSD region and indexed sites files, and finally builds and indexes a FASTA comprising the unique scaffolds. 
 
 ```bash
 #!/bin/bash
 $SCRIPTS/07_site_discovery/prepare_angsd_ref.sh \
  --splits \
- <domain>
- <input>
- <ref>
- <outdir>
+ "southern" \
+ "${SPRUCE_PROJECT}/ref/subsets/southern" \
+ "$SPRUCE_PROJECT/ref/picea_newref.fa" \
+ "$SPRUCE_PROJECT/ref/southern"
 ```
 
 **Inputs**
-  * `<domain>`:   sample domain (e.g., southern)
-  * `input>`:    directory containing *.pos.gz lists (e.g., southern_pt_01.pos.gz, etc)
-  * `<ref>`:  path to reference genome FASTA (indexed for samtools
-  * `<outdir>`:   directory to save merged .bed, .sites, .regions, .fa files
+- `$1` - run mode flag
+- `$2` - domain or sample group (e.g. `southern`, `northern_pt_aa`) 
+- `$3` - directory containing `*.pos.gz` files (e.g., `southern_pt_01.pos.gz`)
+- `$4` - [indexed reference fasta](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
+- `$5` - output directory for results; will create if it doesn't exist
 
 **Outputs**
-  * `\<path/to/output1\>`: Description of the generated output.
-  * `\<path/to/output2\>`: ...
-
+An ANGSD-ready reference assembly for each domain:
+- `${DOMAIN}_ref.bed`: merged and sorted BED 
+- `${DOMAIN}_ref_sites`: ANGSD sites file
+- `${DOMAIN}_ref_sites.bin`: ANGSD sites binary index 
+- `${DOMAIN}_ref_sites.idx`: ANGSD sites binary index 
+- `${DOMAIN}_ref_regions`: ANGSD region file
+- `${DOMAIN}_ref.fa`: fasta records for unique scaffolds 
+- `${DOMAIN}_ref.fa.fai`: fasta index file 
 ---
 
 # Calculate genotype likelihoods
