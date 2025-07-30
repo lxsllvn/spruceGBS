@@ -720,3 +720,249 @@ plot.Upset <- function(upset.list,
     return(uplot)
   }
 }
+
+#' Summarize Depth by Genotype Class with Optional Standardization
+#'
+#' Reads in per-genotype depth tables and site summary statistics, applies several standardization procedures,
+#' and summarizes per-SNP, per-genotype statistics (mean, median, IQR, etc.), with optional differences
+#' between genotype classes.
+#'
+#' @param snpstats_path Character. Path to SNP statistics table (must have "snpcode" and "MAF" columns).
+#' @param alt_path      Character. Path to "homoAlt" genotype matrix (samples in columns, SNPs in rows).
+#' @param ref_path      Character. Path to "homoRef" genotype matrix (same structure as above).
+#' @param het_path      Character. Path to "hetero" genotype matrix (same structure as above).
+#' @param standards     Character vector. Which standardizations to perform. 
+#'                      Options: "none", "sample_z", "loci_z", "double_loci_sample", "double_genotype_sample".
+#'
+#' @return
+#' Tibble: one row per SNP. Columns include per-standardization summaries and difference columns
+#'         for each genotype class and statistic.
+#'
+#' @examples
+#' \dontrun{
+#' summary_df <- depth_by_genotype(
+#'   snpstats_path = "southern_site_summary_maf05.tsv.gz",
+#'   alt_path = "batch_effect/southern.homoAlt.maf05.tsv",
+#'   ref_path = "batch_effect/southern.homoRef.maf05.tsv",
+#'   het_path = "batch_effect/southern.hetero.maf05.tsv"
+#' )
+#' }
+#' @import dplyr data.table tidyr matrixStats
+#' @export
+depth_by_genotype <- function(
+    snpstats_path,
+    alt_path,
+    ref_path,
+    het_path,
+    standards = c("none", "sample_z", "loci_z", "double_loci_sample", "double_genotype_sample")
+) {
+  library(dplyr)
+  library(data.table)
+  library(tidyr)
+  suppressPackageStartupMessages(library(matrixStats))
+  
+  # Standardization map: user input ? code variables
+  std_map <- list(
+    none                   = "raw",
+    sample_z               = "sz",
+    loci_z                 = "lz",
+    double_loci_sample     = "dlz",
+    double_genotype_sample = "dgz"
+  )
+  allowed_standards <- names(std_map)
+  if (!all(standards %in% allowed_standards)) {
+    stop("Allowed standardizations: ", paste(allowed_standards, collapse=", "))
+  }
+  std_names <- unname(unlist(std_map[standards]))
+  
+  # --- 1. Read & join data ---
+  snpstats <- fread(snpstats_path, data.table = FALSE)
+  alt <- fread(alt_path, data.table = FALSE)
+  ref <- fread(ref_path, data.table = FALSE)
+  het <- fread(het_path, data.table = FALSE)
+  alt$genotype <- "homoAlt"; ref$genotype <- "homoRef"; het$genotype <- "hetero"
+  all <- bind_rows(alt, ref, het)
+  rm(alt, ref, het); gc()
+  
+  all <- all %>%
+    left_join(snpstats[, c("snpcode", "MAF", "call_rate")], by = "snpcode") %>%
+    mutate(genotype_majmin = case_when(
+      genotype == "homoRef" & MAF <= 0.5 ~ "homoMaj",
+      genotype == "homoRef" & MAF > 0.5  ~ "homoMin",
+      genotype == "homoAlt" & MAF <= 0.5 ~ "homoMin",
+      genotype == "homoAlt" & MAF > 0.5  ~ "homoMaj",
+      TRUE ~ genotype
+    ))
+  
+  all <- subset(all, call_rate > 0.4 & MAF < 0.95)
+  all <- all[, !(names(all) == "call_rate")]
+  sample_cols <- setdiff(names(all), c("snpcode", "genotype", "genotype_majmin", "MAF"))
+  
+  # --- Z-score helpers ---
+  zscore_mat <- function(mat) {
+    mat_na <- mat; mat_na[mat_na == 0] <- NA
+    col_mean <- colMeans(mat_na, na.rm = TRUE)
+    col_sd <- matrixStats::colSds(mat_na, na.rm = TRUE)
+    sweep(sweep(mat_na, 2, col_mean, "-"), 2, col_sd, "/")
+  }
+  
+  # --- All dataframes for standardizations ---
+  dfs <- list()
+  dfs$raw <- all
+  
+  # --- sample_z: by sample (column) ---
+  if ("sz" %in% std_names) {
+    mat <- as.matrix(all[, sample_cols])
+    mat[mat == 0] <- NA
+    sample.means <- colMeans(mat, na.rm = TRUE)
+    sample.sds   <- matrixStats::colSds(mat, na.rm = TRUE)
+    mat_sample_z <- sweep(mat, 2, sample.means, "-")
+    mat_sample_z <- sweep(mat_sample_z, 2, sample.sds, "/")
+    df <- all
+    df[, sample_cols] <- mat_sample_z
+    names(df)[match(sample_cols, names(df))] <- paste0(sample_cols, "_sample_z")
+    dfs$sz <- df
+    rm(mat, mat_sample_z, df); gc()
+  }
+  
+  # --- loci_z: by locus (row) ---
+  if ("lz" %in% std_names || "dlz" %in% std_names) {
+    all_loci_z <- all
+    mat_loci <- as.matrix(all[, sample_cols])
+    mat_loci[mat_loci == 0] <- NA
+    loci_means <- rowMeans(mat_loci, na.rm = TRUE)
+    loci_sds   <- matrixStats::rowSds(mat_loci, na.rm = TRUE)
+    mat_loci_z <- sweep(mat_loci, 1, loci_means, "-")
+    mat_loci_z <- sweep(mat_loci_z, 1, loci_sds, "/")
+    all_loci_z[, paste0(sample_cols, "_loci_z")] <- mat_loci_z
+    dfs$lz <- all_loci_z
+    rm(mat_loci, mat_loci_z, loci_means, loci_sds); gc()
+  }
+  
+  # --- double_loci_sample (loci_z then sample_z) ---
+  if ("dlz" %in% std_names) {
+    mat_dlz <- as.matrix(dfs$lz[, paste0(sample_cols, "_loci_z")])
+    mat_dlz_sample_z <- zscore_mat(mat_dlz)
+    df <- dfs$lz
+    df[, paste0(sample_cols, "_double_loci_sz")] <- mat_dlz_sample_z
+    dfs$dlz <- df
+    rm(mat_dlz, mat_dlz_sample_z, df); gc()
+  }
+  
+  # --- double_genotype_sample (genotype_z then sample_z) ---
+  if ("dgz" %in% std_names) {
+    # Calculate genotype_z internally only if needed
+    all_genotype_z <- all
+    for (g in unique(all$genotype_majmin)) {
+      idx <- which(all$genotype_majmin == g)
+      mat <- as.matrix(all[idx, sample_cols])
+      mat[mat == 0] <- NA
+      geno.mean <- mean(mat, na.rm = TRUE)
+      geno.sd   <- sd(as.numeric(mat), na.rm = TRUE)
+      if (!is.na(geno.sd) && geno.sd > 0) {
+        all_genotype_z[idx, sample_cols] <- (mat - geno.mean) / geno.sd
+      } else {
+        all_genotype_z[idx, sample_cols] <- NA_real_
+      }
+    }
+    names(all_genotype_z)[match(sample_cols, names(all_genotype_z))] <- paste0(sample_cols, "_genotype_z")
+    mat_dgz <- as.matrix(all_genotype_z[, paste0(sample_cols, "_genotype_z")])
+    mat_dgz_sample_z <- zscore_mat(mat_dgz)
+    df <- all_genotype_z
+    df[, paste0(sample_cols, "_double_genotype_sz")] <- mat_dgz_sample_z
+    dfs$dgz <- df
+    rm(mat_dgz, mat_dgz_sample_z, df); gc()
+  }
+  
+  # --- Row summary function (by locus) ---
+  row_summaries_fast <- function(mat, prefix, only_pos=FALSE) {
+    if (only_pos) { mat[mat <= 0 | is.na(mat)] <- NA }
+    means   <- rowMeans(mat, na.rm = TRUE)
+    medians <- rowMedians(mat, na.rm = TRUE)
+    iqrs    <- rowIQRs(mat, na.rm = TRUE)
+    df <- data.frame(means, medians, iqrs)
+    colnames(df) <- paste0(prefix, c("mean", "median", "iqr"))
+    df
+  }
+  
+  # -- Extract IDs
+  snpcode_vec <- all$snpcode
+  maf_vec     <- all$MAF
+  geno_vec    <- all$genotype_majmin
+  
+  # --- Per-standardization summaries (returns: named list) ---
+  summaries <- list()
+  for (std in std_names) {
+    if (std == "raw") {
+      mat <- as.matrix(dfs$raw[, sample_cols])
+      summaries[[std]] <- row_summaries_fast(mat, "raw_", only_pos=TRUE)
+    } else if (std == "sz") {
+      mat <- as.matrix(dfs$sz[, paste0(sample_cols, "_sample_z")])
+      summaries[[std]] <- row_summaries_fast(mat, "sz_")
+    } else if (std == "dgz") {
+      mat <- as.matrix(dfs$dgz[, paste0(sample_cols, "_double_genotype_sz")])
+      summaries[[std]] <- row_summaries_fast(mat, "dgz_")
+    } else if (std == "lz") {
+      mat <- as.matrix(dfs$lz[, paste0(sample_cols, "_loci_z")])
+      summaries[[std]] <- row_summaries_fast(mat, "lz_")
+    } else if (std == "dlz") {
+      mat <- as.matrix(dfs$dlz[, paste0(sample_cols, "_double_loci_sz")])
+      summaries[[std]] <- row_summaries_fast(mat, "dlz_")
+    } 
+  }
+  
+  # --- Merge summaries and reshape ---
+  summary_df <- tibble(
+    snpcode = snpcode_vec,
+    MAF = maf_vec,
+    genotype_majmin = geno_vec
+  )
+  for (std in std_names) summary_df <- bind_cols(summary_df, summaries[[std]])
+  
+  all_summary_long <- summary_df
+  
+  all_summary <- all_summary_long %>%
+    pivot_longer(
+      cols = matches("_(mean|median|iqr)$"),
+      names_to = "stat",
+      values_to = "value"
+    ) %>%
+    mutate(stat_geno = paste0(stat, "_", genotype_majmin)) %>%
+    select(-stat, -genotype_majmin) %>%
+    pivot_wider(
+      names_from = stat_geno,
+      values_from = value
+    ) %>%
+    relocate(snpcode, MAF) %>%
+    distinct(snpcode, .keep_all = TRUE)
+  
+  # --- Add differences between genotype classes ---
+  add_diff_cols <- function(df, stat_prefix) {
+    suffixes <- c("mean", "median", "iqr")
+    for (suf in suffixes) {
+      maj <- paste0(stat_prefix, suf, "_homoMaj")
+      min <- paste0(stat_prefix, suf, "_homoMin")
+      het <- paste0(stat_prefix, suf, "_hetero")
+      # HomoMaj vs HomoMin
+      diff1 <- paste0(stat_prefix, suf, "_homoDiff")
+      df[[diff1]] <- df[[maj]] - df[[min]]
+      # HomoMaj vs Hetero
+      diff2 <- paste0(stat_prefix, suf, "_MajHetDiff")
+      df[[diff2]] <- df[[maj]] - df[[het]]
+      # HomoMin vs Hetero
+      diff3 <- paste0(stat_prefix, suf, "_MinHetDiff")
+      df[[diff3]] <- df[[min]] - df[[het]]
+    }
+    df
+  }
+  for (std in std_names) {
+    prefix <- switch(std,
+                     raw = "raw_", sz = "sz_", dgz = "dgz_",
+                     lz = "lz_", dlz = "dlz_",
+                     stop("Unknown standardization: ", std)
+    )
+    all_summary <- add_diff_cols(all_summary, prefix)
+  }
+  return(all_summary)
+}
+
