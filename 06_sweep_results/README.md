@@ -50,7 +50,28 @@ Note to self: should summarize the analyses applied to the indvidual heterozygos
 
 # Core parameter combinations
 
+Differences among parameter combinations were dominated by the choice of BAQ model. Across all three domains,  `-baq 0` or `2` resulted in very similar or indistinguishable results, but `-baq 1` tended to produce the best and worst results for a given domain and evaluation test. Over all, the effects of `-baq 1` were overall highly idiosyncratic and varied by test, domain, and minimum base quality (`-minQ 20` and `30`).
+
+Uncapped (`-C 0`) minimum mapping qualities had no clear effect on the evaluation results. When capped mapping qualities (`-C 50`) were invoked, minimum mapping qualities had a more noticeable influence.  However, whether `-C 50` reduced or exacerbated batch effects, and whether it should be paired with higher or lower MQ cutoffs, varied by domain and evaluation test. 
+
+While support for `-C 50` was weak, the `-C 0` PCA biplots showed high variation in northern domain samples from one NovaSeq library. Variation among these samples dominated the second principal component and was not ameliorated by higher minimum MQ cutoffs. Unfortunately, this pattern was not detected by the dd-RDA. Subjectively, I still found the dd-RDA summaries useful, but this approach is not a substitute for visual examination of the PCA biplots, at least not in the current implementation.
+
 ## Individual heterozygosity
+
+In the northern (Fig. 1) domain, parameter combinations invoking `-baq 1` resulted in both the highest and lowest library effect on individual heterozygosity, depending on the minimum base quality setting.  Out of all combinations for this domain, the strongest library effects were found with the `-baq 1 -minQ 20` combination, whereas the weakest were found with `-baq 1 -minQ 30`. Other parameters had no clear effect: results were similar over the `-C`,  `-minMapQ` and `-ct` settings (Figs. 1). While the `-minQ` setting was very influential in combination with `-baq 1`, both values produced similar effects with `-baq 0` and `-baq 2`.
+
+<img width="3000" height="1800" alt="northern_core_varcomp" src="https://github.com/user-attachments/assets/37c8caf7-a14b-4d07-b5ae-63e7169f7938" />
+
+Figure 1.  Northern domain: proportion of variation in individual heterozygosity explained by library membership. Parameter combinations are faceted by base alignment quality model (`-baq`) in rows and the combined setting for the mapping quality capping coefficient (`-C`) and minimum per-library call threshold (`ct`) in columns. Within each facet, the minimum base quality (`-minQ`) is shown on the x-axis and minimum mapping quality (`-minMapQ`) on the y-axis. For example, the top left box shows results over varying `-minQ` and `-minMapQ` settings, with the remaining parameters fixed (`-baq 0 -C 0 -ct 0.40`). 
+
+For Siberia, some `-baq 1` combinations led to the strongest library effects, as observed in the northern domain, but none were among the weakest (Fig. 2). In contrast to the northern domain (Fig. 1), `-baq 1 -minQ 30` resulted in stronger library effects than `-baq 1 -minQ 20`. Also unlike the northern domain, the choice of `-C` had a relatively large effect on the results (Fig. 2). Invoking `-C 50` resulted in less variation attributable to library membership and also made `-minMapQ` more impactful, with higher values resulting in a smaller library effects (Fig. 2).
+
+<img width="3000" height="1800" alt="siberia_core_varcomp" src="https://github.com/user-attachments/assets/05a509d7-5bb9-4878-90a7-24922bfe18e9" />
+
+Figure 2. Siberia domain: proportion of variation in individual heterozygosity explained by library membership. 
+
+For this particular test, the overall response of the southern domain was very similar to the north so I will not give them more attention here. 
+
 
 ### Mixed-effect models 
 
