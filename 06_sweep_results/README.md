@@ -27,7 +27,7 @@ Implements **Step 6: Analyze parameter sweep** of the spruceGBS pipeline. Select
 We first examined a coarse grid of parameter settings to identify the most promising set for more detailed investigation. The 'core' set of combinations comprised:
 - **Base Quality (`-minQ`)**: 20, 30
 - **Mapping Quality (`-minMapQ`)**: 20, 30, 40
-- **BAQ Model (`-baq`)**: 0 (off), 1 (simple), 2 (extended)
+- **Base Alignment Quality (BAQ) Model (`-baq`)**: 0 (off), 1 (simple), 2 (extended)
 - **Mapping Quality Capping Coefficient (`-C`)**: 0, 50
 - **Per-Library Call Rate Filters**: 40%, 50%, and 60%
 
@@ -58,6 +58,8 @@ While support for `-C 50` was weak, the `-C 0` PCA biplots showed high variation
 
 ## Individual heterozygosity
 
+### Mixed-effect models 
+
 In the northern (Fig. 1) domain, parameter combinations invoking `-baq 1` resulted in both the highest and lowest library effect on individual heterozygosity, depending on the minimum base quality setting.  Out of all combinations for this domain, the strongest library effects were found with the `-baq 1 -minQ 20` combination, whereas the weakest were found with `-baq 1 -minQ 30`. Other parameters had no clear effect: results were similar over the `-C`,  `-minMapQ` and `-ct` settings (Figs. 1). While the `-minQ` setting was very influential in combination with `-baq 1`, both values produced similar effects with `-baq 0` and `-baq 2`.
 
 <img width="3000" height="1800" alt="northern_core_varcomp" src="https://github.com/user-attachments/assets/37c8caf7-a14b-4d07-b5ae-63e7169f7938" />
@@ -72,10 +74,10 @@ Figure 2. Siberia domain: proportion of variation in individual heterozygosity e
 
 For this particular test, the overall response of the southern domain was very similar to the north so I will not give them more attention here. 
 
-
-### Mixed-effect models 
-
 ### Within-population variation
+
+
+
 
 ## RDA and PCA 
 
