@@ -62,7 +62,7 @@ While support for `-C 50` was weak, the `-C 0` PCA biplots showed high variation
 
 In the northern (Fig. 1) domain, parameter combinations invoking `-baq 1` resulted in both the highest and lowest library effect on individual heterozygosity, depending on the minimum base quality setting. Out of all combinations for this domain, the strongest library effects were found with the `-baq 1 -minQ 20` combination, whereas the weakest were found with `-baq 1 -minQ 30`. Other parameters had no clear effect: results were similar over the `-C`, `-minMapQ` and `-ct` settings (Fig. 1). While the `-minQ` setting was very influential in combination with `-baq 1`, both values produced similar effects with `-baq 0` and `-baq 2`.
 
-<img width="3000" height="1800" alt="northern_core_varcomp" src="https://github.com/user-attachments/assets/37c8caf7-a14b-4d07-b5ae-63e7169f7938" />
+<img width="2100" height="1260" alt="northern_core_varcomp" src="https://github.com/user-attachments/assets/37c8caf7-a14b-4d07-b5ae-63e7169f7938" />
 
 Figure 1. Northern domain: proportion of variation in individual heterozygosity explained by library membership. Parameter combinations are faceted by base alignment quality model (`-baq`) in rows and the combined setting for the mapping quality capping coefficient (`-C`) and minimum per-library call threshold (`ct`) in columns. Within each facet, the minimum base quality (`-minQ`) is shown on the x-axis and minimum mapping quality (`-minMapQ`) on the y-axis. For example, the top left box shows results over varying `-minQ` and `-minMapQ` settings, with the remaining parameters fixed (`-baq 0 -C 0 -ct 0.40`). 
 
@@ -80,7 +80,7 @@ Here, I focus on the summary statistics by parameter combination, which show the
 
 In the northern domain, the `-C` parameter had a strong influence on within-population variation in individual heterozygosity (Fig. 3). Whether quantified as the mean (Fig. 3) or median (not shown) CV over the five populations, `-C 50` resulted more heterogeneity among individuals, particularly paired with `-baq 0` and `-baq 2`. Combinations with `-baq 1 -C 0` resulted in higher mean CVs than either `-baq 0` or `2`, although this increase was apparently not attributable to library membership (*cf*. Figs. 1 & 3). With `-C 50`, differences among BAQ models were less pronounced, but `-minMapQ` had a larger effect in combination with `-baq 0` or `2`. 
 
-<img width="3000" height="1800" alt="northern_core_mean_cv_het" src="https://github.com/user-attachments/assets/9e21f6ca-b7cc-4c24-9d30-5ee6750a6632" />
+<img width="2400" height="1440" alt="northern_core_mean_cv_het" src="https://github.com/user-attachments/assets/9e21f6ca-b7cc-4c24-9d30-5ee6750a6632" />
 
 Figure 3. Northern domain: mean coefficient of variation (CV) of within-population individual heterozygosity. Parameter combinations are faceted by base alignment quality model (`-baq`) in rows and the combined setting for the mapping quality capping coefficient (`-C`) and minimum per-library call threshold (`ct`) in columns. Within each facet, the minimum base quality (`-minQ`) is shown on the x-axis and minimum mapping quality (`-minMapQ`) on the y-axis. For example, the top left box shows results over varying `-minQ` and `-minMapQ` settings, with the remaining parameters fixed (`-baq 0 -C 0 -ct 0.40`). 
 
