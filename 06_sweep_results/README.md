@@ -5,22 +5,21 @@ Implements **Step 6: Analyze parameter sweep** of the spruceGBS pipeline. Select
 ---
 
 # Contents
-* Summary
-* Core parameter combination results
-  * Individual heterozygosity
-    * Mixed-effect models
-    * Within-population variation
-  * RDA and PCA
-* Extended parameter results
-  * RDA and PCA
-  * Individual heterozygosity
-    * Mixed-effect models
-    * Within-population variation
-  * Genetic diversity results
-* Scripts 
+* [Summary](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#summary)
+* [Core parameter combination results](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#core-parameter-combinations)
+  * [Individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#individual-heterozygosity)
+    * [Mixed-effect models](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#mixed-effect-models)
+    * [Within-population variation](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#within-population-variation)
+  * [RDA and PCA](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#rda-and-pca)
+* [Extended parameter results](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#extended-parameter-combinations)
+  * [RDA and PCA](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#rda-and-pca-1)
+  * [Individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#individual-heterozygosity-1)
+    * [Mixed-effect models](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#mixed-effect-models-1)
+    * [Within-population variation](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#within-population-variation-1)
+  * [Genetic diversity results](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#genetic-diversity)
+* [Scripts](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#scripts)
+  * [Function index](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#analysis_functionsr-index)
      
----
-
 ---
 
 # Summary
@@ -62,7 +61,7 @@ While support for `-C 50` was weak, the `-C 0` PCA biplots showed high variation
 
 In the northern (Fig. 1) domain, parameter combinations invoking `-baq 1` resulted in both the highest and lowest library effect on individual heterozygosity, depending on the minimum base quality setting. Out of all combinations for this domain, the strongest library effects were found with the `-baq 1 -minQ 20` combination, whereas the weakest were found with `-baq 1 -minQ 30`. Other parameters had no clear effect: results were similar over the `-C`, `-minMapQ` and `-ct` settings (Fig. 1). While the `-minQ` setting was very influential in combination with `-baq 1`, both values produced similar effects with `-baq 0` and `-baq 2`.
 
-<img width="2100" height="1260" alt="northern_core_varcomp" src="https://github.com/user-attachments/assets/37c8caf7-a14b-4d07-b5ae-63e7169f7938" />
+<img width="3000" height="1800" alt="northern_core_varcomp" src="https://github.com/user-attachments/assets/37c8caf7-a14b-4d07-b5ae-63e7169f7938" />
 
 Figure 1. Northern domain: proportion of variation in individual heterozygosity explained by library membership. Parameter combinations are faceted by base alignment quality model (`-baq`) in rows and the combined setting for the mapping quality capping coefficient (`-C`) and minimum per-library call threshold (`ct`) in columns. Within each facet, the minimum base quality (`-minQ`) is shown on the x-axis and minimum mapping quality (`-minMapQ`) on the y-axis. For example, the top left box shows results over varying `-minQ` and `-minMapQ` settings, with the remaining parameters fixed (`-baq 0 -C 0 -ct 0.40`). 
 
@@ -70,7 +69,7 @@ For Siberia, some `-baq 1` combinations led to the strongest library effects, as
 
 <img width="3000" height="1800" alt="siberia_core_varcomp" src="https://github.com/user-attachments/assets/05a509d7-5bb9-4878-90a7-24922bfe18e9" />
 
-Figure 2. Siberia domain: proportion of variation in individual heterozygosity explained by library membership. 
+Figure 2. Siberia domain: proportion of variation in individual heterozygosity explained by library membership. See the Fig. 1 caption for more details.
 
 For this particular test, the overall response of the southern domain was very similar to the north so I will not give them more attention here. 
 
@@ -80,14 +79,13 @@ Here, I focus on the summary statistics by parameter combination, which show the
 
 In the northern domain, the `-C` parameter had a strong influence on within-population variation in individual heterozygosity (Fig. 3). Whether quantified as the mean (Fig. 3) or median (not shown) CV over the five populations, `-C 50` resulted more heterogeneity among individuals, particularly paired with `-baq 0` and `-baq 2`. Combinations with `-baq 1 -C 0` resulted in higher mean CVs than either `-baq 0` or `2`, although this increase was apparently not attributable to library membership (*cf*. Figs. 1 & 3). With `-C 50`, differences among BAQ models were less pronounced, but `-minMapQ` had a larger effect in combination with `-baq 0` or `2`. 
 
-<img width="2400" height="1440" alt="northern_core_mean_cv_het" src="https://github.com/user-attachments/assets/9e21f6ca-b7cc-4c24-9d30-5ee6750a6632" />
+<img width="3000" height="1800" alt="northern_core_mean_cv_het" src="https://github.com/user-attachments/assets/9e21f6ca-b7cc-4c24-9d30-5ee6750a6632" />
 
 Figure 3. Northern domain: mean coefficient of variation (CV) of within-population individual heterozygosity. Parameter combinations are faceted by base alignment quality model (`-baq`) in rows and the combined setting for the mapping quality capping coefficient (`-C`) and minimum per-library call threshold (`ct`) in columns. Within each facet, the minimum base quality (`-minQ`) is shown on the x-axis and minimum mapping quality (`-minMapQ`) on the y-axis. For example, the top left box shows results over varying `-minQ` and `-minMapQ` settings, with the remaining parameters fixed (`-baq 0 -C 0 -ct 0.40`). 
 
 Median CVs showed similar patterns, but with an even more difference between results obtained with `-baq 1` versus either `-baq 0` or `2`. The higher heterogeneity generally found with `-C 50`, however, seems largely due to a few individuals. Mean within-population relative IQRs (IQR/median) showed no clear difference between `-C 0` and `-C 50`, except when combined with `-minMapQ 40` (Fig. 4). Because IQRs are less sensitive to within-population extremes, this suggests that heterozygosity estimates for some individuals are highly sensitive to `-C`, while most are not.
 
 More anecdotally, I identified the individuals responsible for this this pattern but could not find any unifying characteristics. The majority were from populations with relatively large sample sizes (ca. 20), which were randomized between two HiSeq libraries. These sensitive individuals came from both libraries and did not differ in sequencing depth or call rate from the other individuals. In addition, the starting DNA for these individuals (and the rest of their populations) was isolated from cotyledons and should be the highest quality out of the entire dataset. 
-
 
 <img width="3000" height="1800" alt="northern_core_mean_rel_iqr_het" src="https://github.com/user-attachments/assets/1bb6059b-5d5e-4824-a5c4-bcd4aa6a4d50" />
 
@@ -119,19 +117,17 @@ Figure 8. Siberia domain: proportion of constrained variation uniquely explained
 
 As in the individual heterozygosity analysis, the effect of `-C` differed among domains. While results for either setting produced similar results in the Siberian and southern domains (Figs. 8-9), combinations with `-C 0` led to higher proportion of geographic variation in the northern domain (Fig. 7), particularly combined with `-baq 0`. This particular example is also the only case where the choice between `-baq 0` and `2` seems impactful. 
 
-
 <img width="3000" height="1800" alt="southern_core_region_prop" src="https://github.com/user-attachments/assets/cffe6102-8366-4c2d-93f4-ae9827e723d2" />
 
 Figure 9. Southern domain: proportion of constrained variation uniquely explained by region in dd-RDA. See the Fig. 7 caption for more details.
 
 For the southern and Siberian domains, the dd-RDA summaries were consistent with my visual interpretation of their PCA score plots. However, for the northern domain, the PCA plots show an important pattern that the dd-RDA summaries were not sensitive enough to detect. While Fig. 7 indicates that parameter combinations with `-C 50` recovered less geographic structure, the score plots show that variation within a NovaSeq library (NO19) dominates the second principal component and that this pattern was not affected by the minimum mapping quality (Fig. 10). Note that these plots also show results with `-minMapQ 50`, which was included in the second parameter sweep, described below. A similar pattern was not evident in another NovaSeq library (ALEX1; Fig. 10), but this may due to the relatively few samples from this library that were included in the parameter sweep analyses. 
 
-
 <img width="2700" height="1500" alt="northern_baq0_C0_pcangsd_library ct5" src="https://github.com/user-attachments/assets/0db79ee3-df78-4479-b447-3d4b080ab2ae" />
 
 Figure 10. Northern domain: PCA score plots for `-baq 0 -C 0 -ct 0.5` parameter combinations. Plots differ in their `-minQ` and `-minMapQ` values. Samples are colored by library membership. 
 
-The NO19 samples originated from two of the four categorical geographic regions, and both show the same spread along PC2 (Fig. 11). This is probably why my dd-RDA summaries failed to indicate an issue with the `-C 0` combinations. In subsequent filtering steps (see [[07 Site discovery and filtering#Batch effect SNPs]]), I compared pairwise geographic differences to a binary same/different library membership matrix instead. That approach may have worked better in the parameter sweep as well, but I have not tested it yet. 
+The NO19 samples originated from two of the four categorical geographic regions, and both show the same spread along PC2 (Fig. 11). This is probably why my dd-RDA summaries failed to indicate an issue with the `-C 0` combinations. [In subsequent filtering steps](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section), I compared pairwise geographic differences to a binary same/different library membership matrix instead. That approach may have worked better in the parameter sweep as well, but I have not tested it yet. 
 
 <img width="2700" height="1500" alt="northern_baq0_C0_pcangsd_region ct5" src="https://github.com/user-attachments/assets/14dda2a6-ce08-49d6-887f-d68bb62b99ab" />
 
