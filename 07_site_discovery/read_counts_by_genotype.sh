@@ -15,10 +15,10 @@ set -euo pipefail
 #   SITE_STATS:  (optional) path to *_site_summary.tsv.gz; if provided, the script will write 
 #                additional outputs for MAF > 0.05 sites
 # Example usage
-# $0 ./read_count_by_genotype.sh \
+# $0 ./read_counts_by_genotype.sh \
 #     $SPRUCE_PROJECT/site_discovery/southern/southern.beagle.reheader.gz \
 #     $SPRUCE_PROJECT/site_discovery/southern/southern.counts.reheader.gz \
-#     southern	
+#     southern \
 #     $SPRUCE_PROJECT/site_discovery/southern/southern_site_summary_maf05.tsv.gz
 
 if [ $# -lt 3 ]; then
