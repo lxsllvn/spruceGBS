@@ -732,7 +732,7 @@ plot.Upset <- function(upset.list,
 #' @param ref_path      Character. Path to "homoRef" genotype matrix (same structure as above).
 #' @param het_path      Character. Path to "hetero" genotype matrix (same structure as above).
 #' @param standards     Character vector. Which standardizations to perform. 
-#'                      Options: "none", "sample_z", "loci_z", "double_loci_sample", "double_genotype_sample".
+#'                      Options: "none", "sample_z", "loci_z", "double_loci_sample", "double_sample_loci",
 #'
 #' @return
 #' Tibble: one row per SNP. Columns include per-standardization summaries and difference columns
@@ -754,37 +754,72 @@ depth_by_genotype <- function(
     alt_path,
     ref_path,
     het_path,
-    standards = c("none", "sample_z", "loci_z", "double_loci_sample", "double_genotype_sample")
+    standards = c(
+      "none", "sample_z", "loci_z", "double_loci_sample", "double_sample_loci", "aggregate"
+    )
 ) {
+  cat("=== depth_by_genotype() DEBUG RUN ===\n")
+
+  # --- Load packages ---
   library(dplyr)
   library(data.table)
   library(tidyr)
-  suppressPackageStartupMessages(library(matrixStats))
-  
-  # Standardization map: user input ? code variables
+  library(matrixStats)
+  library(diptest)
+
+  # --- Standardization map ---
   std_map <- list(
-    none                   = "raw",
-    sample_z               = "sz",
-    loci_z                 = "lz",
-    double_loci_sample     = "dlz",
-    double_genotype_sample = "dgz"
+    none               = "raw",
+    sample_z           = "sz",
+    loci_z             = "lz",
+    double_loci_sample = "dlsz",
+    double_sample_loci = "dslz",
+    aggregate          = "aggregate"
   )
   allowed_standards <- names(std_map)
   if (!all(standards %in% allowed_standards)) {
     stop("Allowed standardizations: ", paste(allowed_standards, collapse=", "))
   }
   std_names <- unname(unlist(std_map[standards]))
-  
+
   # --- 1. Read & join data ---
+  cat("Reading input tables...\n")
   snpstats <- fread(snpstats_path, data.table = FALSE)
   alt <- fread(alt_path, data.table = FALSE)
   ref <- fread(ref_path, data.table = FALSE)
   het <- fread(het_path, data.table = FALSE)
-  alt$genotype <- "homoAlt"; ref$genotype <- "homoRef"; het$genotype <- "hetero"
-  all <- bind_rows(alt, ref, het)
-  rm(alt, ref, het); gc()
-  
-  all <- all %>%
+  cat(sprintf("Read alt: %d ref: %d het: %d\n", nrow(alt), nrow(ref), nrow(het)))
+
+  sample_cols <- setdiff(names(alt), c("genotype", "snpcode"))
+  cat("Number of sample columns:", length(sample_cols), "\n")
+
+  # --- 2. Nonzero filtering and intersection ---
+  alt$nonzero <- rowSums(as.matrix(alt[, sample_cols]) != 0 & !is.na(alt[, sample_cols]))
+  ref$nonzero <- rowSums(as.matrix(ref[, sample_cols]) != 0 & !is.na(ref[, sample_cols]))
+  het$nonzero <- rowSums(as.matrix(het[, sample_cols]) != 0 & !is.na(het[, sample_cols]))
+  cat(sprintf("Alt with >=5 nonzero: %d\n", sum(alt$nonzero >= 5)))
+  cat(sprintf("Ref with >=5 nonzero: %d\n", sum(ref$nonzero >= 5)))
+  cat(sprintf("Het with >=5 nonzero: %d\n", sum(het$nonzero >= 5)))
+
+  alt <- alt[alt$nonzero >= 5, , drop = FALSE]
+  ref <- ref[ref$nonzero >= 5, , drop = FALSE]
+  het <- het[het$nonzero >= 5, , drop = FALSE]
+
+  snps_intersect <- Reduce(intersect, list(alt$snpcode, ref$snpcode, het$snpcode))
+  cat(sprintf("Snps in all three after filtering: %d\n", length(snps_intersect)))
+  alt <- alt[alt$snpcode %in% snps_intersect, , drop = FALSE]
+  ref <- ref[ref$snpcode %in% snps_intersect, , drop = FALSE]
+  het <- het[het$snpcode %in% snps_intersect, , drop = FALSE]
+  cat(sprintf("Filtered alt: %d ref: %d het: %d\n", nrow(alt), nrow(ref), nrow(het)))
+  cat("Unique snpcodes after filtering: alt:", length(unique(alt$snpcode)),
+      "ref:", length(unique(ref$snpcode)), "het:", length(unique(het$snpcode)), "\n")
+
+  alt$genotype <- "homoAlt"
+  ref$genotype <- "homoRef"
+  het$genotype <- "hetero"
+
+  # --- 3. Combine and annotate ---
+  all <- bind_rows(alt, ref, het) %>%
     left_join(snpstats[, c("snpcode", "MAF", "call_rate")], by = "snpcode") %>%
     mutate(genotype_majmin = case_when(
       genotype == "homoRef" & MAF <= 0.5 ~ "homoMaj",
@@ -792,177 +827,348 @@ depth_by_genotype <- function(
       genotype == "homoAlt" & MAF <= 0.5 ~ "homoMin",
       genotype == "homoAlt" & MAF > 0.5  ~ "homoMaj",
       TRUE ~ genotype
-    ))
-  
-  all <- subset(all, call_rate > 0.4 & MAF < 0.95)
-  all <- all[, !(names(all) == "call_rate")]
+    )) %>%
+    subset(call_rate > 0.4 & MAF < 0.95)
+
+  cat(sprintf("Rows after join and annotation: %d\n", nrow(all)))
+  cat("Table of genotypes:\n")
+  print(table(all$genotype))
+  cat("Table of genotype_majmin:\n")
+  print(table(all$genotype_majmin))
+  cat("Snpcodes present after join:", length(unique(all$snpcode)), "\n")
+  cat("Counts per snpcode (should be 3 for all):\n")
+  print(table(table(all$snpcode)))
+
+  all <- all[, !names(all) %in% c("call_rate", "nonzero")]
   sample_cols <- setdiff(names(all), c("snpcode", "genotype", "genotype_majmin", "MAF"))
-  
+  meta_cols <- c("snpcode", "genotype_majmin")
+
   # --- Z-score helpers ---
-  zscore_mat <- function(mat) {
-    mat_na <- mat; mat_na[mat_na == 0] <- NA
-    col_mean <- colMeans(mat_na, na.rm = TRUE)
-    col_sd <- matrixStats::colSds(mat_na, na.rm = TRUE)
-    sweep(sweep(mat_na, 2, col_mean, "-"), 2, col_sd, "/")
+  zscore_col <- function(mat) {
+    col_mean <- colMeans(mat, na.rm = TRUE)
+    col_sd <- matrixStats::colSds(mat, na.rm = TRUE)
+    z <- sweep(sweep(mat, 2, col_mean, "-"), 2, col_sd, "/")
+    z[is.nan(z)] <- NA
+    z
   }
-  
+  zscore_row <- function(mat) {
+    row_mean <- rowMeans(mat, na.rm = TRUE)
+    row_sd <- matrixStats::rowSds(mat, na.rm = TRUE)
+    z <- sweep(sweep(mat, 1, row_mean, "-"), 1, row_sd, "/")
+    z[is.nan(z)] <- NA
+    z
+  }
+
   # --- All dataframes for standardizations ---
+  mat <- as.matrix(all[, sample_cols])
+  mat[mat == 0] <- NA
+  cat("mat dims for raw:", dim(mat), "\n")
   dfs <- list()
-  dfs$raw <- all
-  
-  # --- sample_z: by sample (column) ---
+  dfs$raw <- cbind(mat, all[, meta_cols])
+
   if ("sz" %in% std_names) {
-    mat <- as.matrix(all[, sample_cols])
-    mat[mat == 0] <- NA
-    sample.means <- colMeans(mat, na.rm = TRUE)
-    sample.sds   <- matrixStats::colSds(mat, na.rm = TRUE)
-    mat_sample_z <- sweep(mat, 2, sample.means, "-")
-    mat_sample_z <- sweep(mat_sample_z, 2, sample.sds, "/")
-    df <- all
-    df[, sample_cols] <- mat_sample_z
-    names(df)[match(sample_cols, names(df))] <- paste0(sample_cols, "_sample_z")
-    dfs$sz <- df
-    rm(mat, mat_sample_z, df); gc()
+    mat_sample_z <- zscore_col(mat)
+    cat("mat_sample_z dims:", dim(mat_sample_z), "\n")
+    colnames(mat_sample_z) <- paste0(sample_cols, "_sample_z")
+    dfs$sz <- cbind(mat_sample_z, all[, meta_cols])
+    rm(mat_sample_z); gc()
   }
-  
-  # --- loci_z: by locus (row) ---
-  if ("lz" %in% std_names || "dlz" %in% std_names) {
-    all_loci_z <- all
-    mat_loci <- as.matrix(all[, sample_cols])
-    mat_loci[mat_loci == 0] <- NA
-    loci_means <- rowMeans(mat_loci, na.rm = TRUE)
-    loci_sds   <- matrixStats::rowSds(mat_loci, na.rm = TRUE)
-    mat_loci_z <- sweep(mat_loci, 1, loci_means, "-")
-    mat_loci_z <- sweep(mat_loci_z, 1, loci_sds, "/")
-    all_loci_z[, paste0(sample_cols, "_loci_z")] <- mat_loci_z
-    dfs$lz <- all_loci_z
-    rm(mat_loci, mat_loci_z, loci_means, loci_sds); gc()
+  if ("lz" %in% std_names) {
+    mat_loci_z <- zscore_row(mat)
+    cat("mat_loci_z dims:", dim(mat_loci_z), "\n")
+    colnames(mat_loci_z) <- paste0(sample_cols, "_loci_z")
+    dfs$lz <- cbind(mat_loci_z, all[, meta_cols])
+    rm(mat_loci_z); gc()
   }
-  
-  # --- double_loci_sample (loci_z then sample_z) ---
-  if ("dlz" %in% std_names) {
-    mat_dlz <- as.matrix(dfs$lz[, paste0(sample_cols, "_loci_z")])
-    mat_dlz_sample_z <- zscore_mat(mat_dlz)
-    df <- dfs$lz
-    df[, paste0(sample_cols, "_double_loci_sz")] <- mat_dlz_sample_z
-    dfs$dlz <- df
-    rm(mat_dlz, mat_dlz_sample_z, df); gc()
+  if ("dlsz" %in% std_names) {
+    mat_loci_z <- zscore_row(mat)
+    mat_double_loci_sample_z <- zscore_col(mat_loci_z)
+    cat("mat_double_loci_sample_z dims:", dim(mat_double_loci_sample_z), "\n")
+    colnames(mat_double_loci_sample_z) <- paste0(sample_cols, "_double_loci_sample")
+    dfs$dlsz <- cbind(mat_double_loci_sample_z, all[, meta_cols])
+    rm(mat_loci_z, mat_double_loci_sample_z); gc()
   }
-  
-  # --- double_genotype_sample (genotype_z then sample_z) ---
-  if ("dgz" %in% std_names) {
-    # Calculate genotype_z internally only if needed
-    all_genotype_z <- all
-    for (g in unique(all$genotype_majmin)) {
-      idx <- which(all$genotype_majmin == g)
-      mat <- as.matrix(all[idx, sample_cols])
-      mat[mat == 0] <- NA
-      geno.mean <- mean(mat, na.rm = TRUE)
-      geno.sd   <- sd(as.numeric(mat), na.rm = TRUE)
-      if (!is.na(geno.sd) && geno.sd > 0) {
-        all_genotype_z[idx, sample_cols] <- (mat - geno.mean) / geno.sd
-      } else {
-        all_genotype_z[idx, sample_cols] <- NA_real_
+  if ("dslz" %in% std_names) {
+    mat_sample_z <- zscore_col(mat)
+    mat_double_sample_loci_z <- zscore_row(mat_sample_z)
+    cat("mat_double_sample_loci_z dims:", dim(mat_double_sample_loci_z), "\n")
+    colnames(mat_double_sample_loci_z) <- paste0(sample_cols, "_double_sample_loci")
+    dfs$dslz <- cbind(mat_double_sample_loci_z, all[, meta_cols])
+    rm(mat_sample_z, mat_double_sample_loci_z); gc()
+  }
+  if ("aggregate" %in% std_names) {
+    mat_aggregate <- rowsum(as.matrix(all[, sample_cols, drop=FALSE]), group = all$snpcode, na.rm=TRUE)
+    cat("mat_aggregate dims:", dim(mat_aggregate), "\n")
+    mat_aggregate[mat_aggregate == 0] <- NA
+    colnames(mat_aggregate) <- paste0(sample_cols, "_aggregate")
+    mat_aggregate <- data.frame(
+      snpcode = rownames(mat_aggregate),
+      genotype_majmin = NA_character_,
+      mat_aggregate,
+      row.names = NULL,
+      check.names = FALSE
+    )
+    dfs$aggregate <- mat_aggregate
+    rm(mat_aggregate); gc()
+  }
+
+  # --- Skewness and kurtosis helpers ---
+  rowSkewness_fast <- function(mat, na.rm = TRUE) { 
+    m <- rowMeans(mat, na.rm = na.rm)
+    s <- matrixStats::rowSds(mat, na.rm = na.rm)
+    n <- rowSums(!is.na(mat))
+    m_mat <- matrix(m, nrow = length(m), ncol = ncol(mat))
+    s_mat <- matrix(s, nrow = length(s), ncol = ncol(mat))
+    m3 <- rowMeans((mat - m_mat)^3, na.rm = na.rm)
+    skew <- m3 / (s^3)
+    result <- skew * sqrt(n * (n - 1)) / (n - 2)
+    result[n < 5 | !is.finite(result)] <- NA_real_
+    result
+  }
+  rowKurtosis_fast <- function(mat, na.rm = TRUE) {
+    m <- rowMeans(mat, na.rm = na.rm)
+    s <- matrixStats::rowSds(mat, na.rm = na.rm)
+    n <- rowSums(!is.na(mat))
+    m_mat <- matrix(m, nrow = length(m), ncol = ncol(mat))
+    m4 <- rowMeans((mat - m_mat)^4, na.rm = na.rm)
+    kurt <- m4 / (s^4)
+    result <- kurt - 3
+    result[n < 5 | !is.finite(result)] <- NA_real_
+    result
+  }
+  rowEntropy <- function(mat) {
+    rowsums <- rowSums(mat, na.rm=TRUE)
+    p <- mat / rowsums
+    p[is.na(p)] <- 0
+    logp <- log(p)
+    logp[p == 0] <- 0
+    ent <- -rowSums(p * logp)
+    N <- rowSums(!is.na(mat))
+    ent_max <- log(N) 
+    out <- ent / ent_max # standardized by maximum entropy
+    out[rowsums == 0 | N <= 1] <- NA_real_
+    out
+  }
+  row_prop_extreme <- function(mat) {
+    q1 <- rowQuantiles(mat, probs = 0.25, na.rm = TRUE)
+    q3 <- rowQuantiles(mat, probs = 0.75, na.rm = TRUE)
+    iqr_vals <- q3 - q1
+    n <- rowSums(!is.na(mat))
+    out <- sapply(1:nrow(mat), function(i) {
+      x <- mat[i, ]; ql <- q1[i]; qh <- q3[i]; iqr <- iqr_vals[i]
+      if (is.na(ql) || is.na(qh) || is.na(iqr)) return(NA)
+      extreme <- (x < (ql - 1.5*iqr)) | (x > (qh + 1.5*iqr))
+      mean(extreme, na.rm = TRUE)
+    })
+    out[n < 5 | !is.finite(out)] <- NA_real_
+    out
+  }
+  # --- Row summary function (by locus) ---
+  row_summaries_fast <- function(mat, 
+                                 prefix, 
+                                 which_stats = c("mean", "median", "sd", "mad", "cv", "iqr", "kurtosis", "skewness", "entropy", "extreme", "dip")) {
+    out <- list()
+    for (stat in which_stats) {
+      if (stat == "mean")     out$mean <- rowMeans(mat, na.rm = TRUE)
+      if (stat == "median")   out$median <- rowMedians(mat, na.rm = TRUE)
+      if (stat == "sd")       out$sd <- rowSds(mat, na.rm = TRUE)
+      if (stat == "mad")      out$mad <- rowMads(mat, na.rm = TRUE)
+      if (stat == "cv")       out$cv <- rowSds(mat, na.rm = TRUE)/rowMeans(mat, na.rm = TRUE)
+      if (stat == "iqr")      out$iqr <- rowIQRs(mat, na.rm = TRUE)
+      if (stat == "kurtosis") out$kurtosis <- rowKurtosis_fast(mat, na.rm = TRUE)
+      if (stat == "skewness") out$skewness <- rowSkewness_fast(mat, na.rm = TRUE)
+      if (stat == "entropy")  out$entropy <- rowEntropy(mat)
+      if (stat == "extreme")  out$extreme <- row_prop_extreme(mat)
+      if (stat == "dip") {
+        out$dip <- apply(mat, 1, function(x) {
+          x <- x[is.finite(x) & !is.na(x)]
+          if (length(x) < 5) return(NA_real_)
+          suppressWarnings(diptest::dip(x))
+        })
       }
     }
-    names(all_genotype_z)[match(sample_cols, names(all_genotype_z))] <- paste0(sample_cols, "_genotype_z")
-    mat_dgz <- as.matrix(all_genotype_z[, paste0(sample_cols, "_genotype_z")])
-    mat_dgz_sample_z <- zscore_mat(mat_dgz)
-    df <- all_genotype_z
-    df[, paste0(sample_cols, "_double_genotype_sz")] <- mat_dgz_sample_z
-    dfs$dgz <- df
-    rm(mat_dgz, mat_dgz_sample_z, df); gc()
-  }
-  
-  # --- Row summary function (by locus) ---
-  row_summaries_fast <- function(mat, prefix, only_pos=FALSE) {
-    if (only_pos) { mat[mat <= 0 | is.na(mat)] <- NA }
-    means   <- rowMeans(mat, na.rm = TRUE)
-    medians <- rowMedians(mat, na.rm = TRUE)
-    iqrs    <- rowIQRs(mat, na.rm = TRUE)
-    df <- data.frame(means, medians, iqrs)
-    colnames(df) <- paste0(prefix, c("mean", "median", "iqr"))
+    # Mask all non-finite values (Inf, -Inf, NaN) as NA in all columns
+    out <- lapply(out, function(v) { v[!is.finite(v)] <- NA_real_; v })
+    df <- as.data.frame(out)
+    colnames(df) <- paste0(prefix, which_stats)
     df
   }
-  
-  # -- Extract IDs
+
+  # --- Summaries ---
   snpcode_vec <- all$snpcode
-  maf_vec     <- all$MAF
   geno_vec    <- all$genotype_majmin
-  
-  # --- Per-standardization summaries (returns: named list) ---
+  cat("Genotype_majmin counts:\n")
+  print(table(geno_vec))
+
   summaries <- list()
   for (std in std_names) {
+    cat("Summarizing", std, "...\n")
     if (std == "raw") {
       mat <- as.matrix(dfs$raw[, sample_cols])
-      summaries[[std]] <- row_summaries_fast(mat, "raw_", only_pos=TRUE)
+      stats_to_calc <- c("mean", "median", "sd", "mad", "cv", "iqr", "extreme")
+      summaries[[std]] <- row_summaries_fast(mat, "raw_", which_stats=stats_to_calc)
+      cat("raw summary dims:", dim(summaries[[std]]), "\n")
     } else if (std == "sz") {
       mat <- as.matrix(dfs$sz[, paste0(sample_cols, "_sample_z")])
-      summaries[[std]] <- row_summaries_fast(mat, "sz_")
-    } else if (std == "dgz") {
-      mat <- as.matrix(dfs$dgz[, paste0(sample_cols, "_double_genotype_sz")])
-      summaries[[std]] <- row_summaries_fast(mat, "dgz_")
+      stats_to_calc <- c("mean", "median", "sd", "mad", "cv",  "iqr")
+      summaries[[std]] <- row_summaries_fast(mat, "sz_", which_stats=stats_to_calc)
+      cat("sz summary dims:", dim(summaries[[std]]), "\n")
     } else if (std == "lz") {
       mat <- as.matrix(dfs$lz[, paste0(sample_cols, "_loci_z")])
-      summaries[[std]] <- row_summaries_fast(mat, "lz_")
-    } else if (std == "dlz") {
-      mat <- as.matrix(dfs$dlz[, paste0(sample_cols, "_double_loci_sz")])
-      summaries[[std]] <- row_summaries_fast(mat, "dlz_")
-    } 
+      stats_to_calc <- c("median", "mad")
+      summaries[[std]] <- row_summaries_fast(mat, "lz_", which_stats=stats_to_calc)
+      cat("lz summary dims:", dim(summaries[[std]]), "\n")
+    } else if (std == "dlsz") {
+      mat <- as.matrix(dfs$dlsz[, paste0(sample_cols, "_double_loci_sample")])
+      stats_to_calc <- c("mean", "median", "sd", "mad", "iqr")
+      summaries[[std]] <- row_summaries_fast(mat, "dlsz_", which_stats=stats_to_calc)
+      cat("dlsz summary dims:", dim(summaries[[std]]), "\n")
+    } else if (std == "dslz") {
+      mat <- as.matrix(dfs$dslz[, paste0(sample_cols, "_double_sample_loci")])
+      stats_to_calc <- c("median", "mad")
+      summaries[[std]] <- row_summaries_fast(mat, "dslz_", which_stats=stats_to_calc)
+      cat("dslz summary dims:", dim(summaries[[std]]), "\n")
+    } else if (std == "aggregate") {
+      mat <- as.matrix(dfs$aggregate[, paste0(sample_cols, "_aggregate")])
+      stats_to_calc <- c("mean", "median", "sd", "mad", "cv", "iqr", "kurtosis", "skewness", "entropy", "extreme", "dip")
+      summaries[[std]] <- row_summaries_fast(mat, "aggregate_", which_stats=stats_to_calc)
+      cat("aggregate summary dims:", dim(summaries[[std]]), "\n")
+    }
   }
-  
-  # --- Merge summaries and reshape ---
+
+  # --- Output Construction and Pivot ---
+  if (identical(std_names, "aggregate")) {
+    # Only aggregate: return aggregate stats alone (one row per snpcode)
+    agg_stats <- summaries[["aggregate"]]
+    agg_out <- tibble(snpcode = dfs$aggregate$snpcode)
+    agg_out <- bind_cols(agg_out, agg_stats)
+    cat("Returning only aggregate summary stats; dims:", dim(agg_out), "\n")
+    return(agg_out)
+  }
+
+  # If aggregate is present with other standards, join its summary stats later
   summary_df <- tibble(
     snpcode = snpcode_vec,
-    MAF = maf_vec,
     genotype_majmin = geno_vec
   )
-  for (std in std_names) summary_df <- bind_cols(summary_df, summaries[[std]])
-  
+  for (std in std_names) {
+    if (std != "aggregate") {
+      summary_df <- bind_cols(summary_df, summaries[[std]])
+    }
+  }
+  cat("summary_df dims:", dim(summary_df), "\n")
+  print(head(summary_df))
+
   all_summary_long <- summary_df
-  
+
+  # 2. Pivot longer/wider to produce summary stats by genotype and stat
   all_summary <- all_summary_long %>%
     pivot_longer(
-      cols = matches("_(mean|median|iqr)$"),
+      cols = matches("_(mean|median|iqr|cv|sd|mad|kurtosis|skewness|entropy|extreme|dip)$"),
       names_to = "stat",
       values_to = "value"
     ) %>%
-    mutate(stat_geno = paste0(stat, "_", genotype_majmin)) %>%
-    select(-stat, -genotype_majmin) %>%
+    mutate(
+      stat_geno = if_else(
+        is.na(genotype_majmin),
+        stat,
+        paste0(stat, "_", genotype_majmin)
+      )
+    ) %>%
     pivot_wider(
+      id_cols = c(snpcode),    
       names_from = stat_geno,
       values_from = value
-    ) %>%
-    relocate(snpcode, MAF) %>%
-    distinct(snpcode, .keep_all = TRUE)
-  
-  # --- Add differences between genotype classes ---
+    )
+
+  # 3. Attach aggregate summary stats, if present
+  if ("aggregate" %in% std_names) {
+    agg_stats <- summaries[["aggregate"]]
+    agg_df <- tibble(snpcode = dfs$aggregate$snpcode)
+    agg_df <- bind_cols(agg_df, agg_stats)
+    all_summary <- left_join(all_summary, agg_df, by = "snpcode")
+  }
+
+  cat("all_summary dims after pivot_wider:", dim(all_summary), "\n")
+
+  # --- Add differences and log ratios between genotype classes ---
   add_diff_cols <- function(df, stat_prefix) {
-    suffixes <- c("mean", "median", "iqr")
+    if (stat_prefix %in% c("lz_", "dslz_")) {
+      suffixes <- "median"
+    } else if (stat_prefix %in% "raw_") {
+      suffixes <- c("mean", "median", "iqr")
+    } else {
+      suffixes <- c("mean", "median", "iqr")
+    }
     for (suf in suffixes) {
       maj <- paste0(stat_prefix, suf, "_homoMaj")
       min <- paste0(stat_prefix, suf, "_homoMin")
       het <- paste0(stat_prefix, suf, "_hetero")
-      # HomoMaj vs HomoMin
       diff1 <- paste0(stat_prefix, suf, "_homoDiff")
-      df[[diff1]] <- df[[maj]] - df[[min]]
-      # HomoMaj vs Hetero
       diff2 <- paste0(stat_prefix, suf, "_MajHetDiff")
-      df[[diff2]] <- df[[maj]] - df[[het]]
-      # HomoMin vs Hetero
       diff3 <- paste0(stat_prefix, suf, "_MinHetDiff")
-      df[[diff3]] <- df[[min]] - df[[het]]
+
+      # Only calculate diffs if columns exist
+      if (all(c(maj, min) %in% names(df))) df[[diff1]] <- df[[maj]] - df[[min]]
+      if (all(c(maj, het) %in% names(df))) df[[diff2]] <- df[[maj]] - df[[het]]
+      if (all(c(min, het) %in% names(df))) df[[diff3]] <- df[[min]] - df[[het]]
+
+      # Log-ratios only for raw_
+      if (stat_prefix == "raw_") {
+        # Log(Maj/Min)
+        logratio1 <- paste0(stat_prefix, suf, "_MajMinLogRatio")
+        if (all(c(maj, min) %in% names(df))) {
+          m <- df[[maj]]
+          n <- df[[min]]
+          out <- rep(NA_real_, length(m))
+          idx <- is.finite(m) & is.finite(n) & m > 0 & n > 0
+          out[idx] <- log(m[idx] / n[idx])
+          df[[logratio1]] <- out
+        }
+        # Log(Maj/Het)
+        logratio2 <- paste0(stat_prefix, suf, "_MajHetLogRatio")
+        if (all(c(maj, het) %in% names(df))) {
+          m <- df[[maj]]
+          h <- df[[het]]
+          out <- rep(NA_real_, length(m))
+          idx <- is.finite(m) & is.finite(h) & m > 0 & h > 0
+          out[idx] <- log(m[idx] / h[idx])
+          df[[logratio2]] <- out
+        }
+        # Log(Min/Het)
+        logratio3 <- paste0(stat_prefix, suf, "_MinHetLogRatio")
+        if (all(c(min, het) %in% names(df))) {
+          n <- df[[min]]
+          h <- df[[het]]
+          out <- rep(NA_real_, length(n))
+          idx <- is.finite(n) & is.finite(h) & n > 0 & h > 0
+          out[idx] <- log(n[idx] / h[idx])
+          df[[logratio3]] <- out
+        }
+      }
     }
     df
   }
+
   for (std in std_names) {
     prefix <- switch(std,
-                     raw = "raw_", sz = "sz_", dgz = "dgz_",
-                     lz = "lz_", dlz = "dlz_",
-                     stop("Unknown standardization: ", std)
-    )
-    all_summary <- add_diff_cols(all_summary, prefix)
+                     raw   = "raw_",
+                     sz    = "sz_",
+                     lz    = "lz_",
+                     dlsz  = "dlsz_",
+                     dslz  = "dslz_",
+                     NULL)
+    if (!is.null(prefix)) {
+      all_summary <- add_diff_cols(all_summary, prefix)
+    }
   }
+
+  cat("Final summary NA counts (post-diff):\n")
+  print(colSums(is.na(all_summary)))
+  cat("Rows in final output:", nrow(all_summary), "\n")
+  cat("=== END OF depth_by_genotype() RUN ===\n")
   return(all_summary)
 }
+
+
 
