@@ -13,10 +13,10 @@ set -euo pipefail
 #  HET_PATH:  path *.het.tsv.gz; read depths for heterozygous genotypes
 #  OUT_PATH:  path to output folder; will create if it doesn't exist
 #  OUT_NAME:  basename for result files
+#  MAF_PATH:  path to *.maf.gz 
 
-
-if [ $# -lt 6 ]; then
-  echo "Usage: $0 SNPSTATS_PATH ALT_PATH REF_PATH HET_PATH OUT_PATH OUT_NAME" >&2
+if [ $# -lt 7 ]; then
+  echo "Usage: $0 SNPSTATS_PATH ALT_PATH REF_PATH HET_PATH OUT_PATH OUT_NAME MAF_PATH" >&2
   exit 1
 fi
 
@@ -26,6 +26,8 @@ REF_PATH="$3"
 HET_PATH="$4"
 OUT_PATH="$5"
 OUT_NAME="$6"
+MAF_PATH="$7"
+
 
 # Path to R script with the `depth_by_genotype` function
 SOURCE_PATH="$SCRIPTS/07_site_discovery/discovery_and_filtering.R"
@@ -35,6 +37,12 @@ mkdir -p "${OUT_PATH}"
 
 ml GCC/10.2.0  CUDA/11.1.1  OpenMPI/4.0.5 R/4.0.4
 
+# Print SLURM environment variables
+echo "SLURM_JOB_NODELIST: $SLURM_JOB_NODELIST"
+echo "SLURM_JOB_NUM_NODES: $SLURM_JOB_NUM_NODES"
+echo "SLURM_NTASKS: $SLURM_NTASKS"
+echo "SLURM_CPUS_PER_TASK: $SLURM_CPUS_PER_TASK"
+
 Rscript "$SCRIPTS/07_site_discovery/do_xgboost.R" \
 "${SNPSTATS_PATH}" \
 "${ALT_PATH}"  \
@@ -42,4 +50,5 @@ Rscript "$SCRIPTS/07_site_discovery/do_xgboost.R" \
 "${HET_PATH}" \
 "${OUT_PATH}" \
 "${OUT_NAME}" \
-"${SOURCE_PATH}"
+"${SOURCE_PATH}" \
+"${MAF_PATH}"
