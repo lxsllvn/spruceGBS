@@ -14,8 +14,9 @@ set -euo pipefail
 # Example usage for beagle input:
 # $0 ./reheader_genotype_matrix.sh \
 #     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_domain_filtered.beagle.gz \
-#     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_domain_reheadered.beagle.gz \
-#     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_sample_list.txt 
+#     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_sample_list.txt \
+#     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_domain_reheadered.beagle.gz 
+
 # Example usage for *.counts.gz input:
 # $0 ./reheader_genotype_matrix.sh \
 #     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_domain_filtered.counts.gz \
@@ -40,7 +41,7 @@ SAMPLES="$3"
 POS="${4:-}"
 
 if [ -n "$POS" ]; then
-  python3 $SCRIPTS/07_site_discovery/reheader_genotype_matrix.py "${INPUT}" "${OUTPUT}" "${SAMPLES}" "${POS}"
+  python3 $SCRIPTS/07_site_discovery/reheader_genotype_matrix.py "${INPUT}" "${SAMPLES}" "${OUTPUT}" "${POS}"
 else
-  python3 $SCRIPTS/07_site_discovery/reheader_genotype_matrix.py "${INPUT}" "${OUTPUT}" "${SAMPLES}" 
+  python3 $SCRIPTS/07_site_discovery/reheader_genotype_matrix.py "${INPUT}" "${SAMPLES}" "${OUTPUT}"
 fi
