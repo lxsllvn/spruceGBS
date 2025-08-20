@@ -3,6 +3,7 @@ library(xgboost)
 library(caret)
 library(ParBayesianOptimization)
 library(doParallel)
+library(Cairo)
 
 # -------------------------------------------------------
 # Input arguments
@@ -16,6 +17,7 @@ het_path <- args[4]
 out_path <- args[5]
 out_name <- args[6]
 source_path <- args[7]
+maf_path <- args[8]
 
 source(source_path) # discovery_and_filtering.R for depth_by_genotype()
 out <- paste0(out_path, "/", out_name)
@@ -36,12 +38,7 @@ all_summary <- depth_by_genotype(
   snpstats_path = snpstats_path,
   alt_path = alt_path,
   ref_path = ref_path,
-  het_path = het_path,
-  standards = c("none", 
-                "sample_z", 
-                "loci_z", 
-                "double_loci_sample",
-                "double_genotype_sample"))
+  het_path = het_path)
 
 # Join the genotype-level statistics with the 
 # site-level statistics previously calculated with
@@ -69,6 +66,21 @@ snpstats <- subset(snpstats, MAF < 0.95 &
 
 rm(all_summary); gc()
 
+# One-hot encoding for major and minor bases
+maf <- fread(maf_path, data.table = FALSE)
+maf$snpcode <- paste0(maf$chromo, "_", maf$position)
+
+desired_bases <- c("A", "C", "G", "T")
+maf$major <- factor(maf$major, levels = desired_bases)
+maf$minor <- factor(maf$minor, levels = desired_bases)
+
+maj_onehot <- model.matrix(~ major - 1, data = maf)
+min_onehot <- model.matrix(~ minor - 1, data = maf)
+
+maf_onehot <- data.frame(snpcode = maf$snpcode, maj_onehot, min_onehot, check.names = FALSE)
+snpstats <- left_join(snpstats, maf_onehot, by = "snpcode")
+
+
 write.csv(snpstats,
           paste0(out, "_all_site_summary_maf05.csv"), 
           row.names = FALSE, quote = FALSE)
@@ -81,22 +93,24 @@ write.csv(snpstats,
 # the GBM, but strongly correlated variables make the 
 # interpretation more difficult.
 
-drop_cols <- c("snpcode", "MAF", "Hexp", 
+drop_cols <- c("snpcode", "total_depth", 
+               "MAF", "Hexp", 
                "Hobs", "F", "HWE_LRT", 
                "HWE_pval", "baseQ_pval", 
-               "mapQ_pval", "edge_pval")
+               "mapQ_pval", "edge_pval",
+               "majorA", "majorC", "majorG",
+               "minorT", "minorA", "minorC",
+               "minorG", "minorT")
 
 # 'predictors' is a character vector of columns to check.
 predictors <- colnames(snpstats)[!colnames(snpstats) %in% drop_cols]
 dat <- snpstats[, predictors, drop = FALSE]
 to_drop <- caret::findCorrelation(cor(dat, use = "pairwise.complete.obs"), cutoff = 0.7)
 filtered_feats <- dat[, -to_drop, drop = FALSE]
-# Add binary indicator for SB2 == NA or SB2 != NA.
-filtered_feats$SBbin <- ifelse(is.na(filtered_feats[,"SB2"]), yes = 1, no = 0)
 
 # Combine yvar columns and filtered features into gbmMat.
 yvars <- c("snpcode", "MAF", "Hexp", "Hobs", "F")
-gbmMat <- cbind(snpstats[,yvars], filtered_feats) 
+gbmMat <- gbmMat <- cbind(snpstats[, yvars], filtered_feats, snpstats[, c("majorA", "majorC", "majorG", "minorT", "minorA", "minorC", "minorG", "minorT")])
 rm(snpstats, filtered_feats); gc()
 
 # Split into training and test sets, and add a set indicator to gbmMat.
@@ -133,18 +147,20 @@ folds <- list(
   fold5 = as.integer(seq(5,nrow(train.dat),by = 5))
 )
 
-# Define function for optimization. Must take the 
-# hyperparameters as arguments.
-obj_func <- function(max_depth, 
+# Define function for optimization. Must take the hyperparameters as arguments.
+obj_func <- function(eta,
+                     max_depth, 
                      min_child_weight, 
+                     gamma,
                      subsample, 
                      colsample_bytree,
                      colsample_bynode) {
   # Hyperparameters. 
   param <- list(
-    eta = 0.1, # Step size shrinkage used in updates to prevent overfitting.
+    eta = eta, # Step size shrinkage used in updates to prevent overfitting.
     max_depth = max_depth, # Maximum depth of a tree.
     min_child_weight = min_child_weight, # Minimum sum of instance weights needed in a child.
+    gamma = gamma, # Minimum loss reduction required to make a split.
     subsample = subsample, # Subsample ratio of the training data (rows).
     colsample_bytree =  colsample_bytree,  # Subsample ratio of columns when creating a new tree.
     colsample_bynode =  colsample_bynode # Subsample ratio of columns used in each split.
@@ -153,7 +169,7 @@ obj_func <- function(max_depth,
     params = param,
     data = train.dat,
     label = f.train,
-    nrounds = 5000, # Largely depends on eta; lower eta needs more rounds. 5000 should be more than enough for eta = 0.1.
+    nrounds = 10000, # Largely depends on eta; lower eta needs more rounds.
     folds = folds,
     objective = "reg:squarederror",  
     eval_metric = "rmse",
@@ -161,6 +177,7 @@ obj_func <- function(max_depth,
     early_stopping_rounds = 20, # Stop if no improvement.
     maximize = FALSE
   )
+  
   lst <- list(
     # First argument must be named "Score".
     # Function finds maxima so inverting the output.
@@ -172,26 +189,28 @@ obj_func <- function(max_depth,
 }
 
 # Define the search space boundaries.
-bounds <- list(max_depth = c(1L, 7L),
-               min_child_weight = c(1, 50),
-               subsample = c(0.5, 1),
-               colsample_bytree = c(0.5, 1),
-               colsample_bynode = c(0.5, 1))
+bounds <- list(eta = c(0.02, 0.3), 
+               max_depth = c(1L, 9L), 
+               min_child_weight = c(10, 100),
+               gamma = c(0, 5),
+               # enforce some randomness in all sampling parameters (max ratio = 0.8)
+               subsample = c(0.5, 0.8), 
+               colsample_bytree = c(0.5, 0.8), 
+               colsample_bynode = c(0.5, 0.8))
 
 # Set up to run in parallel.
 cl <- makeCluster(3)
 registerDoParallel(cl)
-clusterExport(cl, c("folds", "train.dat", "f.train"))
+clusterExport(cl, c("folds", "train.dat", "obj_func", "f.train"))
 clusterEvalQ(cl, expr= {
   library(xgboost)
 })
 
 # Run the Bayesian optimization
-# If running interactively, start with a small
-# number of iterations (e.g., iters.n = initPoints + 10), inspect output, and then add more
+# If running interactively, start with a small number of iterations 
+# (e.g., iters.n = initPoints + 10), inspect output, and then add more
 # as needed with addIterations(). In my testing, gpuUtility converged
-# around iters.n = 20, so 40 is to be extra-sure I won't need to 
-# rerun the optimization.
+# around iters.n = 20, so 40 is to be extra-sure I won't need to rerun the optimization.
 # initPoints is the initial number of evenly spaced points in 
 # the parameter space to sample. Set it too low and optimization
 # will take forever to converge; too high is a waste of computational
@@ -200,25 +219,25 @@ clusterEvalQ(cl, expr= {
 
 bayes_out <- bayesOpt(FUN = obj_func,
                       bounds = bounds, 
-                      initPoints = length(bounds) + 6, 
+                      initPoints = length(bounds) * 3, 
                       iters.n = 40,
                       iters.k = 3, 
+                      acqThresh = 0.75,
                       parallel = TRUE)
 stopCluster(cl)
 
 # Temporary: save session in case more iterations are needed
 save.image(paste0(out, "_ParOpt.RData")) 
 
-opt_params <- append(list(eta = 0.1), 
-                     getBestPars(bayes_out))
+opt_params <- getBestPars(bayes_out)
 n.rounds <- bayes_out$scoreSummary$nrounds[which(bayes_out$scoreSummary$Score == max(bayes_out$scoreSummary$Score))]
 
+
 # Save the parameter values.
-write.csv(unlist(append(list(eta = 0.1, 
-                             nrounds = n.rounds), 
+write.csv(unlist(append(list(nrounds = n.rounds), 
                         getBestPars(bayes_out))),
           paste0(out, "_GBM_hyperparameters.csv"),
-          row.names = FALSE, quote = FALSE)
+          row.names = TRUE, quote = FALSE)
 
 # Save the score summary.
 write.csv(bayes_out$scoreSummary,
@@ -272,6 +291,7 @@ p <- ggplot() +
   theme_minimal()
 
 ggsave(paste0(out, "_test_predvactual.png"), 
+       device = "png", type = "cairo",
        plot = p, width = 6, 
        height = 6, dpi = 300, 
        bg = "white")
@@ -288,6 +308,7 @@ p <- ggplot() +
   theme_minimal()
 
 ggsave(paste0(out, "_train_predvactual.png"), 
+       device = "png", type = "cairo",
        plot = p, width = 6, 
        height = 6, dpi = 300, 
        bg = "white")
