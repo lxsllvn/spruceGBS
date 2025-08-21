@@ -218,7 +218,7 @@ modal_extreme_paths <- function(leaves_mat, extreme_idx, helpers) {
 #============================#
 # Path similarity (per-SNP)
 #============================#
-# Returns per-SNP similarity + LCP metrics, plus reusable leaves/tdt/helpers.
+# Returns per-SNP a log-ratio based similarity metric, mean leaf depth, mean leaf cover, and mean leaf value, plus reusable leaves/tdt/helpers.
 compute_snp_similarity <- function(model, X, f_vec,
                                    lower_tail     = FALSE,
                                    extreme_k      = 1,
@@ -247,128 +247,67 @@ compute_snp_similarity <- function(model, X, f_vec,
   n  <- nrow(leaves); Tm <- ncol(leaves)
   .info("Leaves dim: %d x %d (rows x trees)", n, Tm)
   
-  ## Trees + helpers ----------------------------------------------------------
-  tdt <- fast_xgb_tree_dt(model)  
+  ## Trees + helpers -----------------------------------------------------------
+  tdt <- parse_xgb_tree(model)
   if ((max(tdt$Tree) + 1L) != Tm) {
     .warn_bad("Tree count mismatch: dump=%d vs leaves=%d.", max(tdt$Tree)+1L, Tm)
   }
   .info("Building structure helpers...")
   helpers <- build_structure_helpers(tdt)
   
-  .info("Computing modal extreme paths...")
-  modal <- modal_extreme_paths(leaves, extreme_idx, helpers)
-  
-  ## Accumulators -------------------------------------------------------------
-  score_raw    <- numeric(n)
-  score_depthW <- numeric(n)
-  lcp_sum      <- numeric(n)
-  lcp_g_sum    <- numeric(n)
-  lcp_gc_sum   <- numeric(n)
-  lcp_n        <- integer(n)
-  
-  # Distribution-aware similarity & context
-  ratio_sum      <- numeric(n)  # avg(prop_ext / p_leaf)
+  ## Accumulators --------------------------------------------------------------
   loglr_sum      <- numeric(n)  # avg(log(prop_ext / p_leaf))
-  zmean_sum      <- numeric(n)  # avg standardized residual
-  leafdepth_sum  <- numeric(n)  # avg raw leaf depth (depth of leaf node)
-  leafcover_sum  <- numeric(n)  # avg leaf cover (training count)
-  leafval_sum    <- numeric(n)  # avg leaf value (xgb leaf prediction)
+  leafdepth_sum  <- numeric(n)  # avg leaf depth
+  leafcover_sum  <- numeric(n)  # avg leaf cover
+  leafval_sum    <- numeric(n)  # avg leaf value
   
-  eps <- 1e-12
-  m   <- length(extreme_idx)
+  m <- length(extreme_idx)
   
-  ## Per-tree loop ---------------------------------------
+  ## Per-tree loop -------------------------------------------------------------
   for (tt in seq_len(Tm)) {
     tr <- tt - 1L
     lt <- leaves[, tt]
     
-    # Count extreme rows per leaf in this tree
+    # counts of extreme per leaf in this tree
     ft_tab <- table(lt[extreme_idx])
-    if (!length(ft_tab)) {
-      if (show_progress && (tt %% progress_every == 0L || tt == Tm))
-        .info("processed %d/%d trees (%.1f%%)", tt, Tm, 100*tt/Tm)
-      next
-    }
     
+    # extreme SNP frequency per leaf (vectorized to rows)
     leaf_ids_ext <- as.integer(names(ft_tab))
-    idx_ext <- match(lt, leaf_ids_ext); hit_ext <- !is.na(idx_ext)
-    cnt_ext <- integer(n); if (any(hit_ext)) cnt_ext[hit_ext] <- as.integer(ft_tab[idx_ext[hit_ext]])
+    idx_ext <- match(lt, leaf_ids_ext)
+    cnt_ext <- integer(n); hit_ext <- !is.na(idx_ext)
+    if (any(hit_ext)) cnt_ext[hit_ext] <- as.integer(ft_tab[idx_ext[hit_ext]])
     prop_ext <- cnt_ext / m
     
-    # similarity (raw)
-    score_raw <- score_raw + prop_ext
-    
-    # depth weights
-    dep_vals <- helpers$get_depth_map(tr)
-    dep_max  <- helpers$get_max_depth(tr)
-    depthW   <- if (!is.null(dep_vals) && dep_max > 0L) (dep_vals[lt + 1L] / dep_max) else rep(0, n)
-    depthW[!hit_ext] <- 0
-    score_depthW <- score_depthW + (depthW * prop_ext)
-    
-    # baseline global leaf frequency in this tree (for ratio/logLR/z)
+    # total SNP frequency per leaf
     tab_all <- table(lt)
     leaf_ids_all <- as.integer(names(tab_all))
-    idx_all <- match(lt, leaf_ids_all); hit_all <- !is.na(idx_all)
-    cnt_all <- integer(n); if (any(hit_all)) cnt_all[hit_all] <- as.integer(tab_all[idx_all[hit_all]])
+    idx_all <- match(lt, leaf_ids_all)
+    cnt_all <- integer(n); hit_all <- !is.na(idx_all)
+    if (any(hit_all)) cnt_all[hit_all] <- as.integer(tab_all[idx_all[hit_all]])
     p_leaf  <- cnt_all / n
     
-    # standardized residual (binomial null), ratio, and log-likelihood
-    var0 <- p_leaf * (1 - p_leaf)
-    zval <- (cnt_ext - m * p_leaf) / sqrt(pmax(eps, m * var0))
-    ratio <- prop_ext / pmax(eps, p_leaf)
-    llr   <- ifelse(prop_ext > 0 & p_leaf > 0, log(prop_ext / p_leaf), 0)
+    # log-ratio similarity; treat zeros as 0 contribution (instead of -Inf)
+    llr <- ifelse(prop_ext > 0 & p_leaf > 0, log(prop_ext / p_leaf), 0)
+    loglr_sum <- loglr_sum + llr
     
-    ratio_sum  <- ratio_sum  + ratio
-    loglr_sum  <- loglr_sum  + llr
-    zmean_sum  <- zmean_sum  + zval
-    
-    # modal path pieces 
-    modal_nodes <- modal[[tt]]$nodes
-    modal_g     <- modal[[tt]]$gain
-    modal_gc    <- modal[[tt]]$gcover
-    sum_modal_g  <- if (length(modal_g))  sum(modal_g,  na.rm = TRUE) else 0
-    sum_modal_gc <- if (length(modal_gc)) sum(modal_gc, na.rm = TRUE) else 0
-    
-    if (any(hit_ext)) {
-      uniq_nids <- unique(lt[hit_ext])
-      # precompute LCP per unique leaf used in this tree
-      lcp_cache <- vector("list", length(uniq_nids)); names(lcp_cache) <- as.character(uniq_nids)
-      for (i in seq_along(uniq_nids)) {
-        nid <- uniq_nids[i]
-        lp <- helpers$get_leaf_path(tr, nid)
-        pn <- lp$nodes
-        L  <- if (length(pn) && length(modal_nodes)) .lcp_len(pn, modal_nodes) else 0L
-        lcp_norm <- if (dep_max > 0L) (L / dep_max) else 0
-        if (L > 0L) {
-          sum_g_common  <- sum(lp$gain[seq_len(L)],   na.rm = TRUE)
-          sum_gc_common <- sum(lp$gcover[seq_len(L)], na.rm = TRUE)
-        } else {
-          sum_g_common <- 0; sum_gc_common <- 0
-        }
-        lcp_gain_norm   <- if (sum_modal_g  > 0) sum_g_common  / sum_modal_g  else 0
-        lcp_gcover_norm <- if (sum_modal_gc > 0) sum_gc_common / sum_modal_gc else 0
-        lcp_cache[[i]] <- c(lcp_norm, lcp_gain_norm, lcp_gcover_norm)
-      }
-      # apply to all rows by their leaf
-      for (i in seq_along(uniq_nids)) {
-        nid <- uniq_nids[i]
-        rows_i <- which(lt == nid)
-        vals <- lcp_cache[[i]]
-        lcp_sum[rows_i]    <- lcp_sum[rows_i]    + vals[1]
-        lcp_g_sum[rows_i]  <- lcp_g_sum[rows_i]  + vals[2]
-        lcp_gc_sum[rows_i] <- lcp_gc_sum[rows_i] + vals[3]
-        lcp_n[rows_i]      <- lcp_n[rows_i] + 1L
-      }
+    # depth map (index by node id = leaf id)
+    dep_vals <- helpers$get_depth_map(tr)
+    if (!is.null(dep_vals)) {
+      dvec <- dep_vals[lt + 1L]
+      dvec[!is.finite(dvec)] <- 0
+      leafdepth_sum <- leafdepth_sum + dvec
     }
     
-    # leaf depth/cover/value summaries (cheap)
-    if (!is.null(dep_vals)) leafdepth_sum <- leafdepth_sum + dep_vals[lt + 1L] else leafdepth_sum <- leafdepth_sum + 0
+    # leaf cover & value
     leaf_rows <- tdt[Tree == tr & Leaf == TRUE, .(ID, LeafVal, LeafCover = Cover)]
     if (nrow(leaf_rows)) {
       data.table::setkey(leaf_rows, ID)
       LR <- leaf_rows[.(as.integer(lt))]
-      leafcover_sum <- leafcover_sum + as.numeric(LR$LeafCover)
-      leafval_sum   <- leafval_sum   + as.numeric(LR$LeafVal)
+      # coalesce NA to 0 before summing
+      cov <- suppressWarnings(as.numeric(LR$LeafCover)); cov[!is.finite(cov)] <- 0
+      val <- suppressWarnings(as.numeric(LR$LeafVal));   val[!is.finite(val)] <- 0
+      leafcover_sum <- leafcover_sum + cov
+      leafval_sum   <- leafval_sum   + val
     }
     
     if (show_progress && (tt %% progress_every == 0L || tt == Tm)) {
@@ -377,39 +316,19 @@ compute_snp_similarity <- function(model, X, f_vec,
     }
   }
   
-  ## Final per-SNP metrics ----------------------------------------------------
-  sim_raw        <- score_raw / Tm
-  sim_depthW     <- score_depthW / Tm
-  path_lcp_mean  <- ifelse(lcp_n > 0L, lcp_sum    / lcp_n, NA_real_)
-  path_lcpG_mean <- ifelse(lcp_n > 0L, lcp_g_sum  / lcp_n, NA_real_)
-  path_lcpGC_mean<- ifelse(lcp_n > 0L, lcp_gc_sum / lcp_n, NA_real_)
-  
-  sim_ratio      <- ratio_sum     / Tm
-  sim_logLR      <- loglr_sum     / Tm
-  sim_zmean      <- zmean_sum     / Tm
-  mean_leaf_depth<- leafdepth_sum / Tm
-  mean_leaf_cover<- leafcover_sum / Tm
-  mean_leaf_value<- leafval_sum   / Tm
-  
+  ## Final per-SNP metrics -----------------------------------------------------
   summaries <- data.table::data.table(
-    row                         = seq_len(n),
-    F                           = as.numeric(f_vec),
-    similarity                  = sim_raw,
-    similarity_depthW           = sim_depthW,
-    path_overlap_lcp_mean       = path_lcp_mean,
-    lcp_gain_weighted_mean      = path_lcpG_mean,
-    lcp_gainCover_weighted_mean = path_lcpGC_mean,
-    sim_ratio                   = sim_ratio,
-    sim_logLR                   = sim_logLR,
-    sim_zmean                   = sim_zmean,
-    mean_leaf_depth             = mean_leaf_depth,
-    mean_leaf_cover             = mean_leaf_cover,
-    mean_leaf_value             = mean_leaf_value
+    row             = seq_len(n),
+    F               = as.numeric(f_vec),
+    sim_logLR       = loglr_sum     / Tm,
+    mean_leaf_depth = leafdepth_sum / Tm,
+    mean_leaf_cover = leafcover_sum / Tm,
+    mean_leaf_value = leafval_sum   / Tm
   )
   
   list(
     summaries   = summaries,
-    leaves      = leaves,   # n x Tm integer
+    leaves      = leaves,
     tdt         = tdt,
     helpers     = helpers,
     extreme_idx = extreme_idx,
