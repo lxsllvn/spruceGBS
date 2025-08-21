@@ -5,6 +5,11 @@ Implements **Step 3: initial sample quality control** of the spruceGBS pipeline.
 ---
 
 # Contents
+* [Sequencing depth and breadth per sample](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc#sequencing-depth-and-breadth-per-sample)
+* [Visualization and removal](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc#visualization-and-removal)
+  
+---
+# Scripts 
 
 * **`bam_mapping_summary.sh`**: finds the number of mapped scaffolds and the total number of mapped reads per sample and returns a summary dataframe
 
