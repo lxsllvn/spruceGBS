@@ -6,6 +6,7 @@ Implements **Step 6: Analyze parameter sweep** of the spruceGBS pipeline. Select
 
 # Contents
 * [Summary](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#summary)
+* [Statistical methods](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#statistical-methods)
 * [Core parameter combination results](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#core-parameter-combinations)
   * [Individual heterozygosity](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#individual-heterozygosity)
     * [Mixed-effect models](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#mixed-effect-models)
@@ -43,9 +44,23 @@ While no parameter combination emerged as a clear winner, `-C 0` and `60` produc
 
 The differences between `-C 75` and `100` were small, and the choice between them ultimately comes down to personal preference. For this dataset, I chose `-C 100` and `-minMapQ 50` because this combination minimized spurious structure in the PCAs most effectively, and it does not appear too stringent for non-reference populations based on the marginal means of diversity statistics from the mixed effect models. However, the small quantitative and qualitative differences between `-C 75` and `100` over a range of minimum mapping and base qualities give me confidence that this region of parameter space is reasonable. I also selected the more permissive minimum base quality (`-minQ 20`), given the lack of difference with `-minQ 30`.
 
-More detailed results are summarized below.
+# Statistical methods
 
-Note to self: should summarize the analyses applied to the indvidual heterozygosity, PCA, and per-locus diversity metrics. Random effects models (indv_het ~ 1 + (1|library) and exploratory figures for individual heterozygosity, RDA and qualitative intepretation of PCA bipolots, model selection on maximal mixed effect models (y ~ ... + (1 | snpcode) + (1 | pop_code)) for diversity metrics plus an unholy number of exploratory plots. 
+Parameter sweeps were conducted for each domain separately over a subset of experimental loci[] and populations[]. For each parameter combination, we estimated individual heterozygosity, domain-level covariance matrices, and a suite of genetic diversity metrics on a per-locus, per-population diversity basis, as described in [[05 ANGSD parameter testing]]. 
+
+individual heterozygosity:
+We quantified variation in individual heterozygosity explained by library with linear mixed effects models (indv_het ~ 1 + (1|library)).
+
+Spurious variation in heterozygosity could also result from differences in starting DNA quality and quantity, which may not be fully captured by library membership. Therefore, we also qualitatively evaluated the effects of the parameter combinations on summary statistics (CV, IQR, IQR/median) of within-population variation. 
+
+PCA: dd-RDa, qualitative interpretation of score plots
+
+RDA partitions variance into components uniquely attributable to library membership or geographic region, as well their joint, or confounded, effect. In these analyses, we focused on the proportion of constrained variation explained by region. While the size (i.e, R2) of each component could vary across domains and parameter combinations, the effect of geography should be relatively stronger in the absence of sequencing artefacts. 
+
+Diversity metrics:
+model selection on maximal mixed effect models (y ~ ... + (1 | snpcode) + (1 | pop_code)). estimated marginal means. model selection only on the extended parameter combination and with minimum per-library call rate fixed to 60%. 
+
+many exploratory plots; can be created with functions in the r code if you really want (not shown)
 
 # Core parameter combinations
 
