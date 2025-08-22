@@ -1,8 +1,36 @@
 # spruceGBS
 
-Work in progress.
+Please note, this is a work in progress.
 
+---
 
+# Background
+
+This repository contains workflows and analyses for a large-scale genotyping-by-sequencing (GBS) study in _Picea_ (spruce). The dataset includes ~1,500 individuals sampled from ~150 locations spanning the Atlantic to Pacific coasts and from the Arctic Ocean to the Adriatic Sea, covering _Picea abies_ (Norway spruce), _P. obovata_ (Siberian spruce), and possibly _P. koraiensis_. These are long-lived, outcrossing forest trees with large, repetitive genomes (~20 Gb, > 70% TEs) and an incomplete reference assembly, factors that complicate short-read variant discovery.
+
+---
+
+# Motivation 
+
+We initially applied a standard, literature-based variant calling pipeline (`fastQC` → `BWA-MEM` → indel realignment → `samtools mpileup` → basic SNP filters). While this approach recovered the expected broad-scale population structure, it also suggested a surprising spatial distribution of genetic diversity (e.g.,  extremely low diversity in some regions with implausibly high inbreeding estimates), suggesting the generic pipeline was inadequate for this dataset.
+
+This repository develops and evaluates a pipeline tailored to the specific challenges of the spruce GBS data, including:
+
+- multiple sequencing libraries (some HiSeq, some NovaSeq) with varying DNA quality and input quantity;
+- partial confounding between geography and sequencing library;
+- a highly fragmented (10 million scaffolds), incomplete (~ 60%) reference assembly (circa 2013);
+- potential reference bias, paralog collapse, null alleles, and allelic dropout across divergent lineages and hybrid zones.
+
+---
+# Objectives
+
+The goal is to produce more reliable estimates of genetic diversity and structure by systematically testing parameter choices and filters, with an emphasis on transparency and reproducibility. 
+
+In addition, I am also using this project to explore ways to make the implementation of customized pipelines more accessible. This includes things like the statistical summaries used in the parameter sweep, the interpretable machine learning approach to variant filtration, and a set of scripts to make parsing the results from `ANGSD` in particular less angst-inducing. I have tried to write didactic READMEs, but this, in particular, is a work in progress. 
+
+---
+
+# Contents 
 
 # [Step 1: initial pre-processing and alignment](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment)
   * [Read pre-processing and quality control](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment#read-pre-processing-and-quality-control)
