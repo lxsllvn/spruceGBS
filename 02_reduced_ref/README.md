@@ -9,6 +9,14 @@ Implements **Step 2: reduced reference preparation** of the spruceGBS pipeline. 
 ---
 
 # Contents
+* [Scaffold search](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref#scaffold-search)
+* [Reduced reference preparation](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref#reduced-reference-preparation)
+* [Identify target regions for analysis](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref#identify-target-regions-for-analysis)
+* [BAM intersections](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref#bam-intersections)
+  
+---
+
+# Scripts
 
 * **`scaffolds_with_coverage.sh`**: find scaffolds with ≥5 mapped reads in any sample
 * **`reduced_reference_prep.sh`**: create new reference with only scaffolds with mapped reads
