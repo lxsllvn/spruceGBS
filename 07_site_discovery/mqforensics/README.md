@@ -41,7 +41,7 @@ mq_forensics -b <in.bam> -r <regions.bed> -C <cap_threshold> -d <min_depth> \
   -o <per_site.tsv> -O <per_interval.tsv>
 ```
 
-`-b` : input BAM (indexed `.bai` required)
+- `-b` : input BAM (indexed `.bai` required)
 - `-r` : BED (0-based, half-open)
 - `-C` : cap threshold (samtools-style `-C`), e.g. `50`
 - `-d` : **min depth**; if site depth `< d`, all numeric outputs for that site print as `NA` (default `0`)
