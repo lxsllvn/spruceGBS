@@ -13,7 +13,7 @@ Fast C/htslib tool to extract per-site (within a BED) and per-interval mapping s
 
 Requires:
 - GCC or Clang with C11 support
-- [htslib](https://github.com/samtools/htslib) installed and discoverable via `pkg-config`
+- [htslib](https://github.com/samtools/htslib) v. 1.18 installed and discoverable via `pkg-config`
 
 Quick build:
 ```bash
