@@ -99,7 +99,7 @@ drop_cols <- c("snpcode", "total_depth",
                "HWE_pval", "baseQ_pval", 
                "mapQ_pval", "edge_pval",
                "majorA", "majorC", "majorG",
-               "minorT", "minorA", "minorC",
+               "majorT", "minorA", "minorC",
                "minorG", "minorT")
 
 # 'predictors' is a character vector of columns to check.
@@ -110,7 +110,7 @@ filtered_feats <- dat[, -to_drop, drop = FALSE]
 
 # Combine yvar columns and filtered features into gbmMat.
 yvars <- c("snpcode", "MAF", "Hexp", "Hobs", "F")
-gbmMat <- gbmMat <- cbind(snpstats[, yvars], filtered_feats, snpstats[, c("majorA", "majorC", "majorG", "minorT", "minorA", "minorC", "minorG", "minorT")])
+gbmMat <- gbmMat <- cbind(snpstats[, yvars], filtered_feats, snpstats[, c("majorA", "majorC", "majorG", "majorT", "minorA", "minorC", "minorG", "minorT")])
 rm(snpstats, filtered_feats); gc()
 
 # Split into training and test sets, and add a set indicator to gbmMat.
