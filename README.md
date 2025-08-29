@@ -40,7 +40,7 @@ Creating references for the ANGSD analyses was a three-step process (which we re
 
 ---
 
-# Pileline contents 
+# Pipeline contents 
 
 # [Step 1: initial pre-processing and alignment](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment)
   * [Read pre-processing and quality control](https://github.com/lxsllvn/spruceGBS/tree/main/01_read_alignment#read-pre-processing-and-quality-control)
