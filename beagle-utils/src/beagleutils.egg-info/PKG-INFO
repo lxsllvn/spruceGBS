@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: beagleutils
+Version: 0.1.0
+Summary: Utilities for BEAGLE genotype-likelihood and counts matrices
+License: MIT
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
