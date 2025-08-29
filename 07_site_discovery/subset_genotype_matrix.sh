@@ -1,33 +1,58 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-# Subsets reheadered ANGSD DP matrices (*.counts.gz) and beagle genotype likelihood files (*.beagle.gz)
-# to a specified list of SNPs and/or samples. Note! "reheadered" means the input has informative
-# column and row names. This is not the default output from ANGSD; run reheader_genotype_matrix.sh
-# first to add SNP codes and sample names.
+# Subset reheadered ANGSD counts (*.counts.gz) or BEAGLE GL (*.beagle.gz) files
+# by SNPs and/or samples.
+# - "Reheadered" means INPUT has informative snpcode/marker and sample names.
+# - Subsetting requires providing --snps and/or --samples lists.
 #
-# Usage: $0 INPUT OUTPUT ARGS
-#   INPUT:     *.beagle.gz or *.counts.gz to subset 
-#   OUTPUT:    output name
-#   ARGS:      --snps snps_to_keep.txt and/or --samples samples_to_keep.txt
-# Example usage
-# $0 ./subset_genotype_matrix.sh \
+# Usage:
+#   subset_by_list.sh INPUT OUTPUT [--snps SNPS.txt] [--samples SAMPLES.txt]
+#
+#   INPUT   : reheadered *.counts.gz or *.beagle.gz
+#   OUTPUT  : output .gz file
+#   --snps  : (optional) list of snpcodes/markers to keep (one per line)
+#   --samples : (optional) list of sample names to keep (one per line)
+#
+# Example:
+#   subset_by_list.sh \
 #     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_domain_filtered.beagle.gz \
 #     $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/FennN.beagle.gz \
-#     --samples $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/FennN_sample_list.txt \ 
-#     --snps $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_domain_filtered_snpcodes.txt
+#     --samples $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/FennN_sample_list.txt \
+#     --snps    $SPRUCE_PROJECT/site_discovery/northern/domain_filtered/northern_domain_filtered_snpcodes.txt
 
-if [ $# -lt 3 ]; then
-  echo "Usage: $0 INPUT OUTPUT ARGS" >&2
+if (( $# < 2 )); then
+  echo "Usage: $0 INPUT OUTPUT [--snps SNPS.txt] [--samples SAMPLES.txt]" >&2
   exit 1
 fi
 
-ml GCC/13.3.0
-ml Python/3.12.3
-ml SciPy-bundle/2024.05
+INPUT="$1"
+OUTPUT="$2"
+shift 2  # remaining args forwarded directly to geno-utils
 
-INPUT="$1"   
-OUTPUT="$2" 
-shift 2  # $@ all the ARGS
+# --- HPC modules / environment ---
+module purge
+module load GCC/13.3.0
+module load Python/3.12.3
+module load SciPy-bundle/2024.05
 
-python3 $SCRIPTS/07_site_discovery/subset_genotype_matrix.py "${INPUT}" "${OUTPUT}" "$@"
+# --- Activate project venv ---
+export REPO_DIR="${REPO_DIR:-$SCRIPTS/beagle-utils}"
+if [[ ! -f "$REPO_DIR/pyproject.toml" ]]; then
+  echo "[ERROR] REPO_DIR does not point to beagle-utils repo: $REPO_DIR" >&2
+  exit 2
+fi
+# shellcheck source=/dev/null
+source "$REPO_DIR/.venv/bin/activate"
+
+# --- Input validation ---
+if [[ ! -f "$INPUT" ]]; then
+  echo "[ERROR] INPUT file not found: $INPUT" >&2
+  exit 3
+fi
+
+# --- Run geno-utils subset ---
+echo "[INFO] Subsetting $INPUT -> $OUTPUT ..."
+geno-utils subset "$INPUT" "$OUTPUT" "$@"
+
+echo "[OK] Wrote: $OUTPUT"
