@@ -50,9 +50,13 @@ rsconnect/
 
 # SLURM submission scripts
 jobs/
+submit.sh
 
 # SLURM job logs
 logs/
 
 # Template README
 README_template.md
+
+# ignore venv
+beagle-utils/.venv/
