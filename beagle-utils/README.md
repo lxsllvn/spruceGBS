@@ -15,13 +15,13 @@ Designed for HPC pipelines: supports gzipped I/O, consistent TSV formats, and ex
 ```bash
 # from the repo root
 pip install -e .
-``
+```
 
 This provides the console entrypoint:
 
-``
+```
 geno-utils --help
-``
+```
 
 ## Quick start
 
@@ -51,7 +51,7 @@ Adds informative headers so downstream tools don’t rely on position or anonymo
   - Output columns: `snpcode  <sample_1> <sample_2>` ...
   - snpcode is created as `chrom_pos` from the provided `.pos.gz`.
 
-- BEAGLE mode (no --pos):
+- BEAGLE mode (no `--pos`):
   - Output columns: `marker allele1 allele2 <sample_1> <sample_1> <sample_1> <sample_2> <sample_2> <sample_2> ...`
   - Assumes triplets per sample (AA, AB, BB) and rewrites the header to repeat each sample name 3× in order. Errors if the column count doesn’t match `3 + 3 * n_samples`.
 
