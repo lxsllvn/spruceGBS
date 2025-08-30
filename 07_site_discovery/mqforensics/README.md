@@ -6,7 +6,7 @@ Fast C/htslib tool to extract per-site (within a BED) and per-interval mapping s
 - Whole-read (WR) attribution for SubQ, ClipQ, capped MQ (`-C`) — each read contributes its single value to every site it overlaps.
 - Local site features (mismatches, indel lengths at start position) derived from CIGAR + MD.
 - Interval metric: `aligned_bp_in_interval` (area under coverage).
-
+- Summarizer can take hundreds of per-sample TSVs (concatenated/sorted) and produce per-site summary stats across samples.
 ---
 
 ## Build
@@ -36,6 +36,8 @@ gcc -O3 -std=c11 mq_forensics.c \
 
 ## Usage
 
+### 1. Extract metrics from one BAM
+
 ```
 mq_forensics -b <in.bam> -r <regions.bed> -C <cap_threshold> -d <min_depth> \
   -o <per_site.tsv> -O <per_interval.tsv>
@@ -62,6 +64,21 @@ parallel -j 16 \
   'mq_forensics -b {} -r regions.bed -C 50 -d 5 -o {.}.site.tsv -O {.}.iv.tsv' \
   :::: bam.list
 ```
+### 2. Summarize across samples
+Concatenate per-site TSVs from many samples, sort them by `chrom,pos`, then summarize:
+
+```bash
+{ head -n1 all_samples.tsv
+  tail -n +2 all_samples.tsv \
+  | LC_ALL=C sort -S 3G --parallel=1 -k1,1 -k2,2n
+} \
+| mq_forensics summarize -i - -o per_site_summary.tsv
+```
+
+- `-i` : input TSV (from `analyze`, sorted by `chrom,pos`)
+- `-o` : summarized TSV across all samples
+
+---
 
 ## Outputs
 
@@ -96,6 +113,22 @@ chrom  start  end  aligned_bp_in_interval
 
 - `aligned_bp_in_interval`: sum of M/= /X overlap with the interval (area under coverage).
 
+### Summarized per-site TSV columns (from `summarize`)
+
+For each chrom:pos, across all input samples:
+
+- depth-normalized rates:  
+  `mismatch_rate_mean/median/sd`  
+  `ins_rate_mean/median/sd`  
+  `del_rate_mean/median/sd`  
+  `clip_rate_mean/median/sd`  
+
+- per-read distributions summarized:  
+  `mq_*`, `capmq60_*`, `effmq_*`, `subQ_*`, `clipQ_*`  
+
+This collapses hundreds of per-sample TSVs into one per-site summary.
+
+
 ## Requirements & assumptions
 
 BAM contains `MD` (and usually `NM`) tags. If missing:
@@ -110,8 +143,10 @@ samtools calmd -bAr ref.fa in.bam > out.bam
 
 ## Performance notes
 
-- Single pass per BAM; per-site stats kept in memory only for current interval.
-- Read vectors (for medians/SDs) scale with depth per site; tested with BAMs with average depths of ~30-80x.  For ultra-deep data, open an issue and we (realistically, ChatGPT) can switch medians to streaming/selection.
+- `analyze`: Single pass per BAM; per-site stats kept in memory only for current interval.
+- `summarize`: Streaming reducer; memory ~depth of site × #metrics. Sorting is the bottleneck; external sort is used for large files.  
+- Read vectors (for medians/SDs) scale with depth per site; tested with BAMs with average depths of ~30-80x. For ultra-deep data, open an issue and we (realistically, ChatGPT) can switch medians to streaming/selection.
+- Tested at scale: hundreds of BAMs → 300M+ per-site rows → summarized on 6 GB/core.  
 
 
 ## Troubleshooting
