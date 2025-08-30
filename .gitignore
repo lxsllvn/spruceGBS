@@ -60,3 +60,7 @@ README_template.md
 
 # ignore venv
 beagle-utils/.venv/
+
+# build outputs
+mq_forensics
+*.o
