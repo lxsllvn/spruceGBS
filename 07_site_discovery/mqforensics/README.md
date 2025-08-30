@@ -1,156 +1,151 @@
-````markdown
 # mq_forensics
 
-Fast C/htslib tool to extract per-site (within a BED) and per-interval mapping statistics from BAMs.  Designed for GBS/amplicon panels (short loci), scalable to thousands of BAMs.
+Fast C/htslib tool to extract per-site (within a BED) and per-interval mapping statistics from BAMs. Designed for GBS/amplicon panels (short loci), scalable to thousands of BAMs.
 
 - Whole-read (WR) attribution for SubQ, ClipQ, capped MQ (`-C`) — each read contributes its single value to every site it overlaps.
 - Local site features (mismatches, indel lengths at start position) derived from CIGAR + MD.
-- Interval metric: `aligned_bp_in_interval` (area under coverage).
-- Summarizer can take hundreds of per-sample TSVs (concatenated/sorted) and produce per-site summary stats across samples.
----
+- Interval metric: aligned_bp_in_interval (area under coverage).
+- Two analysis modes:
+  - direct mode (per-site means/medians/SDs from raw read vectors)
+  - sufficient statistics mode (`--emit-suffstats`) — compact, streaming-friendly per-site triplets (n,sum,sumsq) for each metric.
+- Optional histograms (`--emit-hist`) allow divergences (KS, Wasserstein-1, Jensen–Shannon) and histogram-based medians to be computed later in summarize.
+- Optional flanking-region context (`--flank N`, `--ref-only`) computes per-site windowed means of coverage and clip-fraction in the surrounding region, optionally restricted to ref-matching bases only.
+- Summarizer reduces hundreds of per-sample TSVs (concatenated/sorted) into pooled per-site summary statistics across samples.
 
-## Build
+# Build
 
 Requires:
 - GCC or Clang with C11 support
-- [htslib](https://github.com/samtools/htslib) v. 1.18 installed and discoverable via `pkg-config`
+- htslib v1.18+ installed and discoverable via pkg-config
 
-Quick build:
 ```bash
 make
 ```
-Manual build (if you prefer no Makefile):
 
+or manual:
 ```bash
-gcc -O3 -std=c11 mq_forensics.c -o mq_forensics \
+gcc -O3 -std=c11 -o mq_forensics src/*.c \
   $(pkg-config --cflags --libs htslib) -lm
 ```
 
-If `pkg-config` isn’t set up, specify include/lib paths:
+# Usage
 
-```bash
-gcc -O3 -std=c11 mq_forensics.c \
-  -I/path/to/htslib/include -L/path/to/htslib/lib \
-  -o mq_forensics -lhts -lpthread -lz -lbz2 -llzma -lm
+## 1. Extract metrics from one BAM
+
+```bash 
+mq_forensics analyze -b <in.bam> -r <regions.bed> -C 50 -d 5 \
+  -o per_site.tsv -O per_interval.tsv [options]
 ```
 
-## Usage
+Required:
 
-### 1. Extract metrics from one BAM
+- `b` : input BAM (indexed .bai required)
+- `r` : BED (0-based, half-open)
+- `C` : cap threshold (samtools-style -C), e.g. 50
+- `d` : minimum depth for site to emit numeric outputs
 
-```
-mq_forensics -b <in.bam> -r <regions.bed> -C <cap_threshold> -d <min_depth> \
-  -o <per_site.tsv> -O <per_interval.tsv>
-```
+Optional:
 
-- `-b` : input BAM (indexed `.bai` required)
-- `-r` : BED (0-based, half-open)
-- `-C` : cap threshold (samtools-style `-C`), e.g. `50`
-- `-d` : **min depth**; if site depth `< d`, all numeric outputs for that site print as `NA` (default `0`)
-- `-o` : per-site output TSV
-- `-O` : per-interval output TSV
+`--emit-suffstats` : emit n,sum,sumsq triplets instead of direct means/medians (compact + required for summarize)
+`--emit-hist`      : also emit histograms for MQ/effMQ/clipfrac
+`-f/--fasta ref.fa`: FASTA reference (needed if using flank/ref-only)
+`--flank N`        : include flanking context over ±N bp for per-site windows
+`--ref-only`       : restrict flanking coverage/clip stats to reads matching the reference at that base
 
 Example:
 
 ```bash
-mq_forensics -b sample.bam -r regions.bed -C 50 -d 5 \
-  -o sample.per_site.tsv \
-  -O sample.per_interval.tsv
+mq_forensics analyze -b sample.bam -r regions.bed -C 50 -d 5 \
+  -o sample.site.tsv -O sample.iv.tsv --emit-suffstats --emit-hist \
+  -f ref.fa --flank 5 --ref-only
 ```
-Many BAMs in parallel:
+
+Parallel many BAMs:
 
 ```bash
 parallel -j 16 \
-  'mq_forensics -b {} -r regions.bed -C 50 -d 5 -o {.}.site.tsv -O {.}.iv.tsv' \
+  'mq_forensics analyze -b {} -r regions.bed -C 50 -d 5 \
+     -o {.}.site.tsv -O {.}.iv.tsv --emit-suffstats --emit-hist' \
   :::: bam.list
 ```
-### 2. Summarize across samples
-Concatenate per-site TSVs from many samples, sort them by `chrom,pos`, then summarize:
+
+## 2. Summarize across samples
+Concatenate per-site TSVs, sort, then summarize:
 
 ```bash
-{ head -n1 all_samples.tsv
-  tail -n +2 all_samples.tsv \
+{ head -n1 *.site.tsv | head -n1
+  tail -q -n +2 *.site.tsv \
   | LC_ALL=C sort -S 3G --parallel=1 -k1,1 -k2,2n
 } \
 | mq_forensics summarize -i - -o per_site_summary.tsv
 ```
 
-- `-i` : input TSV (from `analyze`, sorted by `chrom,pos`)
-- `-o` : summarized TSV across all samples
+- `-i` : sorted suffstats TSVs (chrom,pos key required)
+- `-o` : summarized pooled TSV
 
----
+# Outputs
 
-## Outputs
+**Per-site (direct mode)**
 
-### Per-site TSV columns
-
-```
+```bash
 chrom  pos  depth  mismatch_bases  ins_len_sum  del_len_sum  clip_bases_sum
 mq_mean  mq_median  mq_sd
 capmq60_mean  capmq60_median  capmq60_sd
 effmq_mean  effmq_median  effmq_sd
 subQ_mean  subQ_median  subQ_sd
 clipQ_mean  clipQ_median  clipQ_sd
+[flank_cov_mean  flank_clipfrac_mean]   # if --flank enabled
 ```
 
-- `depth`: read count overlapping the site (reads with a deletion at the site are included — mpileup semantics).
-- `mismatch_bases`: # of substitutions at the site (from MD).
-- `ins_len_sum` / `del_len_sum`: summed lengths of insertions/deletions starting at this site.
-- `clip_bases_sum`: sum of soft+hard clipped bases from all reads overlapping the site.
-- `mq_*`: raw BAM-MEM MAPQ statistics per site (0–60, as reported by the aligner).
-- `capmq60_*`: mapping quality caps computed by the -C formula (sam_cap_mapq), rescaled from [0..C] to the familiar [0..60] range. These are upper bounds; the cap can only lower mapping quality, never raise it.
-- `effmq_*`: effective mapping qualities actually used downstream:
-- `subQ_*`: sum of capped substitution base qualities per read (BQ≥13; each capped at 33), aggregated per site.
-- `clipQ_*`: soft-clip quality sum + 13×hard-clip length per read, aggregated per site.
+**Per-site (suffstats mode)**
 
-When `depth < min_depth` (or `depth == 0`), all numeric columns are `NA`.
-
-### Per-interval TSV columns
-
+```bash
+chrom  pos  depth  mismatch_bases  ins_len_sum  del_len_sum  clip_bases_sum
+n_mq  sum_mq  sumsq_mq
+n_cap sum_cap sumsq_cap
+n_eff sum_eff sumsq_eff
+n_subQ sum_subQ sumsq_subQ
+n_clipQ sum_clipQ sumsq_clipQ
+n_clipfrac sum_clipfrac sumsq_clipfrac
+n_capped sum_delta sumsq_delta
+[n_flank_cov sum_flank_cov sumsq_flank_cov
+ n_flank_cf  sum_flank_cf  sumsq_flank_cf]   # if --flank enabled
+[hists …]   # if --emit-hist
 ```
+
+**Per-interval**
+
+```bash
 chrom  start  end  aligned_bp_in_interval
 ```
 
-- `aligned_bp_in_interval`: sum of M/= /X overlap with the interval (area under coverage).
+**Summarized per-site (across samples)**
 
-### Summarized per-site TSV columns (from `summarize`)
-
-For each chrom:pos, across all input samples:
-
-- depth-normalized rates:  
-  `mismatch_rate_mean/median/sd`  
-  `ins_rate_mean/median/sd`  
-  `del_rate_mean/median/sd`  
-  `clip_rate_mean/median/sd`  
-
-- per-read distributions summarized:  
-  `mq_*`, `capmq60_*`, `effmq_*`, `subQ_*`, `clipQ_*`  
-
-This collapses hundreds of per-sample TSVs into one per-site summary.
+From suffstats input, `summarize` produces:
+- depth-normalized global rates: mismatch/ins/del/clip
+- pooled mean & SD for: MQ, capMQ, effMQ, SubQ, ClipQ, clipfrac
+- capping load: frac_capped, delta mean/sd
+- flanking context pooled stats: flank_cov_mean/sd, flank_cf_mean/sd (if present)
+- optional divergences & histogram-based medians if `--emit-hist`
 
 
-## Requirements & assumptions
+# Requirements & assumptions
 
-BAM contains `MD` (and usually `NM`) tags. If missing:
+- BAM contains MD (and usually NM). If missing:
 
 ```bash
 samtools calmd -bAr ref.fa in.bam > out.bam
 ```
 
-- BAM must be indexed (`samtools index in.bam`).
-- BED is BED3+ (extra columns ignored).
+- BAM must be indexed.
+- BED is BED3+.
 
 
-## Performance notes
 
-- `analyze`: Single pass per BAM; per-site stats kept in memory only for current interval.
-- `summarize`: Streaming reducer; memory ~depth of site × #metrics. Sorting is the bottleneck; external sort is used for large files.  
-- Read vectors (for medians/SDs) scale with depth per site; tested with BAMs with average depths of ~30-80x. For ultra-deep data, open an issue and we (realistically, ChatGPT) can switch medians to streaming/selection.
-- Tested at scale: hundreds of BAMs → 300M+ per-site rows → summarized on 6 GB/core.  
+# Performance notes
 
+- `analyze`: Single-pass per BAM; per-site accumulators reset each interval.
+- `summarize`: Streaming reducer, memory ~ O(depth × #metrics). Sorting dominates runtime.
+- Histograms make KS/W1/JS comparisons cheap in summarize.
+- Flank stats add lightweight prefix-sum passes per interval.
 
-## Troubleshooting
-
-- **Linker errors about `log10/sqrt`** → add `-lm` (Makefile already does).
-- **`libhts.so` not found at runtime** → set `LD_LIBRARY_PATH` to your htslib lib dir or use a module.
-- **`MD` missing** → run `samtools calmd` as above.
