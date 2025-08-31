@@ -12,7 +12,7 @@ This repository contains workflows and analyses for a large-scale genotyping-by-
 
 # Motivation 
 
-We initially applied a standard, literature-based variant calling pipeline (`fastQC` → `BWA-MEM` → indel realignment → `samtools mpileup` → basic SNP filters). While this approach recovered the expected broad-scale population structure, it also suggested a surprising spatial distribution of genetic diversity (e.g.,  extremely low diversity in some regions with implausibly high (F<sub>is</sub> > 0.40) inbreeding estimates), suggesting the generic pipeline was inadequate for this dataset.
+We initially applied a standard, literature-based variant calling pipeline (`fastQC` → `BWA-MEM` → indel realignment with legacy `GATK` → `samtools mpileup` → basic SNP filters). While this approach recovered the expected broad-scale population structure, it also suggested a surprising spatial distribution of genetic diversity (e.g.,  extremely low diversity in some regions with implausibly high (F<sub>is</sub> > 0.40) inbreeding estimates), suggesting the generic pipeline was inadequate for this dataset.
 
 This repository develops and evaluates a pipeline tailored to the specific challenges of the spruce GBS data, including:
 
@@ -26,7 +26,9 @@ This repository develops and evaluates a pipeline tailored to the specific chall
 
 The goal is to produce more reliable estimates of genetic diversity and structure by systematically testing parameter choices and filters, with an emphasis on transparency and reproducibility. I have tried to write didactic READMEs, but this, in particular, is a work in progress. 
 
-Additionally, I am using this project to explore ways to make the implementation of customized pipelines more accessible. This includes things like the statistical summaries used in the parameter sweep to make interpretation more scalable and less qualitative, the interpretable machine learning approach using gradient boosted decision trees for variant filtration, and scripts to make parsing the results from `ANGSD` in particular less angst-inducing. 
+Additionally, I am using this project to explore ways to make the implementation of customized pipelines more accessible. This includes things like the statistical summaries used in the parameter sweep to make interpretation more scalable and less qualitative, the interpretable machine learning approach using gradient boosted decision trees for variant filtration, and scripts to make parsing the results from `ANGSD` in particular less angst-inducing. The most developed of these tools are:
+- [`mqforensics`](https://github.com/lxsllvn/spruceGBS/tree/main/mqforensics)  - a C program for characterizing mapping quality distributions, including capped (`-C`) qualities, INDELs, clipped bases, mismatches and more from BAM alignments.
+- ['beagle-utils'](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) - a Python package for manipulating and subsetting read count matrices and beagle-formatted genotype likelihoods produced by `ANGSD`.
 
 ---
 
