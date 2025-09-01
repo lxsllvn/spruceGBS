@@ -215,14 +215,33 @@ While this method does not produce definitive classifications of site quality, i
 
 ## Feature engineering 
 
-ANGSD provides several commonly used diagnostic metrics based on alelle states, including:
-
+ANGSD provides several commonly used diagnostic metrics based on allele states, including:
 - **`baseQ_Z`**: Wilcoxon Mann–Whitney test comparing base qualities of major vs. minor alleles.
 - **`mapQ_Z`**: analogous statistic for mapping qualities.
 - **`edge_Z`**: Wilcoxon test comparing distances from read edges between alleles.
 - **`SB1`, `SB2`, `SB3`**: three measures of strand bias.
 
-While widely applied, these statistics are not particularly powerful indicators of spurious loci (e.g. [samtools filtering workflow](https://www.htslib.org/workflow/filter.html)), and their sensitivity is likely further reduced by the combined challenges of this dataset: a large genome, short-read sequencing, and an imperfect reference assembly.
+At present, these are collected by `summarize_site_stats.py`, which also calculates some site-level depth summaries from the `*.counts.gz` matrix.  This setup is awkward because we calculate more (and partially overlapping) statistics from `*.counts.gz` later on. I hope to streamline this later on. 
+
+### `summarize_site_stats.sh` usage
+
+```bash
+#!/bin/bash
+$SCRIPTS/07_site_discovery/summarize_site_stats.sh \
+$SPRUCE_PROJECT/site_discovery/siberia \
+siberia 
+```
+
+**Inputs**
+* `$1` - path to folder containing the `*.pos.gz`, `*.counts.gz`, `*.hwe.gz`, and `*.snpStat.gz` files
+* `$2` - output basename for site summary tables
+* `$3` - basename of the `*.pos.gz`, `*.counts.gz`, etc; optional if folder only contains one set of input files. 
+
+**Outputs**
+  * `*_site_summary.tsv` - summary table with columns `snpcode`, `total_depth`, `mean_depth`, `median_depth`, `call_rate`, `cv_depth`, `rel_IQR_depth`, `MAF`, `Hexp`, `Hobs`, `F` , `SB1` ,`SB2`, `SB3`, `HWE_LRT`, `HWE_pval`, `baseQ_Z`, `baseQ_pval`, `mapQ_Z`, `mapQ_pval`, `edge_z`, `edge_pval`
+  * `*_site_summary_maf05.tsv` - as above, but only for MAF > 0.05 sites
+
+### Depth-based features
 
 Beyond these built-in metrics, we also examined read depth patterns. Unusually high, low, or variable coverage can signal problematic sites, especially when depth differs systematically by genotype. For example, null alleles can result in reduced read depth for apparent homozygotes compared to heterozygotes at the same locus ([McCouch et al. 2016](https://pmc.ncbi.nlm.nih.gov/articles/PMC4734769/)).
 
