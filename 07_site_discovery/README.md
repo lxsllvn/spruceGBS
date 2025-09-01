@@ -2,7 +2,6 @@
 
 Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpful summary goes here. 
 
-
 ---
 
 # Contents
@@ -23,7 +22,7 @@ Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpf
 * **`split_reference.sh`**: divides reference genome into subsets, creating indexed FASTA files and corresponding ANGSD region/site files
 * **`site_discovery.sh`**: runs ANGSD on each reference subset and finds sites passing minimal quality filters
 * **`prepare_angsd_ref.sh`**: concatenates filtered position files and prepares final region, site, and indexed fasta files
-* **`angsd_likelihoods.sh`**: run ANGSD using the prepared references and returns beagle-formatted genotype likelihoods and site-level quality data
+* **`angsd_likelihoods.sh`**: runs ANGSD on the prepared reference and outputs genotype likelihoods and site-level summary statistics
 * **`summarize_site_stats.py`**: does stuff
 * **`summarize_site_stats.sh`**: does stuff
 * **`codeconvert`**: does stuff
