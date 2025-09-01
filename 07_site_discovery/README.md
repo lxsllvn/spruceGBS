@@ -1,12 +1,7 @@
 # Overview
 
-Implements Step 7: site discovery and filtering of the spruceGBS pipeline.
+Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpful summary goes here. 
 
-Helpful summary goes here. 
-
-There is a lot of code, but most of the steps/code are just to get ANGSD to play nice with my dataset, get the results into more user-friendly formats, and filter the DP matrices/beagle likelihoods by sample and site. 
-
-interesting analytical choices are really only made in seleciton of site-level filters/thresholds, the batch effect analysis, and the population-stratified MAF selection 
 
 ---
 
@@ -28,13 +23,11 @@ interesting analytical choices are really only made in seleciton of site-level f
 * **`split_reference.sh`**: divides reference genome into subsets, creating indexed FASTA files and corresponding ANGSD region/site files
 * **`site_discovery.sh`**: runs ANGSD on each reference subset and finds sites passing minimal quality filters
 * **`prepare_angsd_ref.sh`**: concatenates filtered position files and prepares final region, site, and indexed fasta files
-* **`angsd_likelihoods.sh`**: does stuff
+* **`angsd_likelihoods.sh`**: run ANGSD using the prepared references and returns beagle-formatted genotype likelihoods and site-level quality data
 * **`summarize_site_stats.py`**: does stuff
 * **`summarize_site_stats.sh`**: does stuff
 * **`codeconvert`**: does stuff
 * **`sample_call_rates.sh`**: does stuff
-* **`reheader_genotype_matrix.py`**: does stuff
-* **`subset_genotype_matrix.py`**: does stuff
 * **`reheader_genotype_matrix.sh`**: does stuff
 * **`subset_genotype_matrix.sh`**: does stuff
 * **`library_call_thresh.R`**: does stuff
