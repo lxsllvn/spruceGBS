@@ -91,4 +91,8 @@ Creating references for the ANGSD analyses was a three-step process (which we re
    * [Function index](https://github.com/lxsllvn/spruceGBS/tree/main/06_sweep_results#analysis_functionsr-index)
 
 # [Step 7: find and filter sites](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery)
-
+* [Create ANGSD reference assemblies](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#create-angsd-reference-assemblies)
+* [Calculate genotype likelihoods](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#create-angsd-reference-assemblies)
+* [Site filtering](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#site-filtering)
+  * [Interpretable machine learning](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#interpretable-machine-learning)
+  * [Feature engineering](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#feature-engineering)
