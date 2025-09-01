@@ -9,8 +9,8 @@ Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpf
 * [Create ANGSD reference assemblies](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#create-angsd-reference-assemblies)
 * [Calculate genotype likelihoods](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#create-angsd-reference-assemblies)
 * [Site filtering](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#site-filtering)
-  * [Interpretable machine learning](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
-  * [Feature engineering](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
+  * [Interpretable machine learning](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#interpretable-machine-learning)
+  * [Feature engineering](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#feature-engineering)
 * [Assess and remove batch effects](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
 * [Stratified MAF filters](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#section)
 
