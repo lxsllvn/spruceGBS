@@ -206,7 +206,14 @@ While this method does not produce definitive classifications of site quality, i
 
 ## Feature engineering 
 
-ANGSD provides several commonly used diagnostic metrics based on allele states, including:
+Feature engineering refers to the process of creating and transforming variables from raw data, analogous to selecting predictor variables for a statistical model.  While some ML jargon is just re-packaged statistics, the expectations from a well-designed set of 'features' are quite different from a predictor matrix, both philosophically and practically.
+
+In regression, predictors are typically chosen for their _a priori_ mechanistic relevance and transformed to satisfy model assumptions about error structure, linearity, or collinearity. By contrast, GBDTs can flexibly approximate nonlinearities and interactions, and issues such as correlated variables, weak predictors, or differences in scale do not undermine the validity of the model itself. The focus shifts instead to extracting as much complementary information as possible about the processes that could generate the observed data.
+
+This shift introduces new risks: features can capture patterns that are highly predictive but irrelevant to the underlying biology and leak information about the target variable. For instance, mapping-quality distributions differ systematically between reference and alternate alleles because mismatches against the reference are penalized during alignment. Features based on MQs must therefore be designed carefully to avoid dependence on true genetic diversity. Indirect leakage can arise when sample-size–sensitive statistics such as skewness or kurtosis are calculated by genotype class, allowing the model to “predict” population-level parameters (e.g. F<sub>is</sub>​) by inferring genotype frequencies, a discovery that is technically correct but wholly unhelpful.
+
+
+To get started, `ANGSD` provides several commonly used diagnostic metrics based on allele states, including:
 - **`baseQ_Z`**: Wilcoxon Mann–Whitney test comparing base qualities of major vs. minor alleles.
 - **`mapQ_Z`**: analogous statistic for mapping qualities.
 - **`edge_Z`**: Wilcoxon test comparing distances from read edges between alleles.
