@@ -1,11 +1,11 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 IFS=$'\n\t'
 
 # ------------------------
 # Defaults for SBATCH
 # ------------------------
-ACCOUNT="0000000-000"
+ACCOUNT="hpc2n2024-161"
 JOB_NAME="${PWD##*/}"
 NTASKS=1
 CPUS_PER_TASK=1
@@ -14,10 +14,8 @@ TIME="0-06:00:00"
 LOG_DIR="logs"
 OUT_PATTERN="${LOG_DIR}/%x-%j.out"
 ERR_PATTERN="${LOG_DIR}/%x-%j.err"
+DEPENDENCY=""
 
-# ------------------------
-# Usage helper
-# ------------------------
 usage() {
   cat <<EOF >&2
 Usage: $0 [options] script_path [script_args...]
@@ -30,15 +28,15 @@ Options:
   -t TIME           time limit, D-HH:MM:SS (default: $TIME)
   -o OUT_PATTERN    stdout file pattern (default: $OUT_PATTERN)
   -e ERR_PATTERN    stderr file pattern (default: $ERR_PATTERN)
+  -d DEP            dependency string for sbatch, e.g. "afterok:123:456"
   -h                show this help and exit
+
+Note: prints the submitted JobID to stdout.
 EOF
   exit 1
 }
 
-# ------------------------
-# Parse options
-# ------------------------
-while getopts "A:J:n:c:C:t:o:e:h" opt; do
+while getopts "A:J:n:c:C:t:o:e:d:h" opt; do
   case "$opt" in
     A) ACCOUNT="$OPTARG" ;;
     J) JOB_NAME="$OPTARG" ;;
@@ -48,29 +46,19 @@ while getopts "A:J:n:c:C:t:o:e:h" opt; do
     t) TIME="$OPTARG" ;;
     o) OUT_PATTERN="$OPTARG" ;;
     e) ERR_PATTERN="$OPTARG" ;;
+    d) DEPENDENCY="$OPTARG" ;;
     h) usage ;;
     *) usage ;;
   esac
 done
 shift $((OPTIND-1))
 
-# ------------------------
-# Require at least the script to run
-# ------------------------
-if [ "$#" -lt 1 ]; then
-  usage
-fi
+if [ "$#" -lt 1 ]; then usage; fi
 SCRIPT="$1"; shift
 SCRIPT_ARGS=("$@")
 
-# ------------------------
-# Ensure log directory exists
-# ------------------------
 mkdir -p "$LOG_DIR"
 
-# ------------------------
-# Build the sbatch argument array
-# ------------------------
 SBATCH_ARGS=(
   -A "$ACCOUNT"
   -J "$JOB_NAME"
@@ -80,9 +68,12 @@ SBATCH_ARGS=(
   -t "$TIME"
   --output="$OUT_PATTERN"
   --error="$ERR_PATTERN"
+  --parsable
 )
+if [[ -n "$DEPENDENCY" ]]; then
+  SBATCH_ARGS+=( --dependency="$DEPENDENCY" )
+fi
 
-# ------------------------
-# Submit!
-# ------------------------
-sbatch "${SBATCH_ARGS[@]}" "$SCRIPT" "${SCRIPT_ARGS[@]}"
+# Submit and print just the JobID
+JOBID=$(sbatch "${SBATCH_ARGS[@]}" "$SCRIPT" "${SCRIPT_ARGS[@]}")
+echo "$JOBID"
