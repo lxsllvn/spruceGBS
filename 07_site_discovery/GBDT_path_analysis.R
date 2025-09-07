@@ -1,101 +1,300 @@
-suppressPackageStartupMessages({
-  library(xgboost)
-  library(data.table)
-})
+#===============================================================================
+# XGBoost Rule Harvesting & Validation 
+#===============================================================================
 
-#============================#
-# Small utilities
-#============================#
-timestamped_file <- function(prefix, ext) {
-  sprintf("%s_%s%s", prefix, format(Sys.time(), "%Y%m%d_%H%M%S"), ext)
+
+#============================
+# Shared validators and helpers
+#============================
+.require_numeric_vec <- function(x, name) {
+  if (!is.numeric(x)) stop(sprintf("[%s] must be numeric.", name))
 }
-.info     <- function(...) cat(sprintf("[INFO] %s\n", sprintf(...)))
-.warn_bad <- function(...) warning(sprintf("[WARN] %s", sprintf(...)), call. = FALSE)
-.stop_bad <- function(...) stop(sprintf("[ERROR] %s", sprintf(...)))
 
-#============================#
+.require_finite_center_scale <- function(y, name) {
+  m1 <- mean(y, na.rm = TRUE)
+  m2 <- stats::median(y, na.rm = TRUE)
+  sdv <- stats::sd(y, na.rm = TRUE)
+  md  <- stats::mad(y, constant = 1.4826, na.rm = TRUE)
+  if (!is.finite(m1)) stop(sprintf("[%s] mean is NA/Inf.", name))
+  if (!is.finite(m2)) stop(sprintf("[%s] median is NA/Inf.", name))
+  if (!is.finite(sdv) || sdv <= 0) stop(sprintf("[%s] sd <= 0 or NA/Inf.", name))
+  if (!is.finite(md)  || md  <= 0) stop(sprintf("[%s] mad <= 0 or NA/Inf.", name))
+}
+
+#============================
+# Small shared helpers
+#============================
+# Derive extremes + background indices from yvar, based on explicit input or statistical banding around the center.
+derive_yvar_idx <- function(
+    y, n,
+    lower_tail  = FALSE,
+    extreme_k   = 1,
+    extreme_idx = NULL,
+    bg_idx      = NULL,
+    bg_band_k   = NULL,
+    band_center = c("mean","median"),
+    band_scale  = c("sd","mad"),
+    check_y_stats = NULL
+) {
+  band_center <- match.arg(band_center)
+  band_scale  <- match.arg(band_scale)
+  
+  # Decide if we need y-stat checks:
+  # default: TRUE unless BOTH idx sets are provided and no banding is requested
+  if (is.null(check_y_stats)) {
+    check_y_stats <- (is.null(extreme_idx) || is.null(bg_idx) || !is.null(bg_band_k))
+  }
+  
+  # Only validate y if needed
+  if (isTRUE(check_y_stats)) {
+    if (!is.numeric(y)) stop("[derive_yvar_idx] y must be numeric.")
+    if (length(y) != n) stop("[derive_yvar_idx] length(y) must equal n.")
+    mu  <- mean(y, na.rm = TRUE);  if (!is.finite(mu))  stop("[derive_yvar_idx] mean(y) not finite.")
+    md  <- stats::median(y, na.rm = TRUE); if (!is.finite(md))  stop("[derive_yvar_idx] median(y) not finite.")
+    sdv <- stats::sd(y, na.rm = TRUE);     if (!is.finite(sdv) || sdv <= 0) stop("[derive_yvar_idx] sd(y) <= 0 or non-finite.")
+    madv<- stats::mad(y, constant = 1.4826, na.rm = TRUE); if (!is.finite(madv) || madv <= 0) stop("[derive_yvar_idx] mad(y) <= 0 or non-finite.")
+  }
+  
+  # Build extremes
+  if (is.null(extreme_idx)) {
+    mu  <- mean(y, na.rm = TRUE); sdv <- sd(y, na.rm = TRUE)
+    thr <- if (!lower_tail) mu + extreme_k * sdv else mu - extreme_k * sdv
+    extr_idx <- if (!lower_tail) which(y >= thr) else which(y <= thr)
+  } else {
+    extr_idx <- sort(unique(as.integer(extreme_idx)))
+    extr_idx <- extr_idx[extr_idx >= 1L & extr_idx <= n]
+  }
+  
+  # Build background
+  if (!is.null(bg_idx)) {
+    bg_idx <- sort(unique(as.integer(bg_idx)))
+    bg_idx <- bg_idx[bg_idx >= 1L & bg_idx <= n]
+    if (length(intersect(extr_idx, bg_idx))) bg_idx <- setdiff(bg_idx, extr_idx)
+  } else if (!is.null(bg_band_k)) {
+    ctr <- if (band_center == "mean") mean(y, na.rm = TRUE) else stats::median(y, na.rm = TRUE)
+    scl <- if (band_scale  == "sd")   stats::sd(y, na.rm = TRUE) else stats::mad(y, constant = 1.4826, na.rm = TRUE)
+    lo  <- ctr - bg_band_k * scl; hi <- ctr + bg_band_k * scl
+    bg_idx <- which(y >= lo & y <= hi)
+    if (length(extr_idx)) bg_idx <- setdiff(bg_idx, extr_idx)
+  } else {
+    bg_idx <- setdiff(seq_len(n), extr_idx)
+  }
+  
+  # Final checks
+  N_extr <- length(extr_idx); N_bg <- length(bg_idx)
+  if (N_extr <= 0L) stop("[derive_yvar_idx] No rows in extreme set.")
+  if (N_bg   <= 0L) stop("[derive_yvar_idx] No rows in background set.")
+  if (length(intersect(extr_idx, bg_idx)) > 0L) stop("[derive_yvar_idx] extreme and background indices overlap.")
+  
+  is_extreme <- logical(n); is_extreme[extr_idx] <- TRUE
+  is_bg      <- logical(n); is_bg[bg_idx]       <- TRUE
+  
+  list(
+    extr_idx  = extr_idx,
+    bg_idx    = bg_idx,
+    N_extr    = N_extr,
+    N_bg      = N_bg,
+    base_rate = N_extr / (N_extr + N_bg),
+    is_extreme = is_extreme,
+    is_bg      = is_bg
+  )
+}
+
+# Precomputes the number of leaf bins (`nb`) for each tree column in a leaves matrix.
+precompute_nb_vec <- function(leaves) {
+  Tm <- ncol(leaves)
+  # dgCMatrix fast-path via Matrix::colMaxs (not matrixStats)
+  if (inherits(leaves, "dgCMatrix")) {
+    if (requireNamespace("Matrix", quietly = TRUE)) {
+      mx <- Matrix::colMaxs(leaves, na.rm = TRUE)
+      mx[!is.finite(mx)] <- -1
+      return(as.integer(mx + 1L))
+    }
+  }
+  if (requireNamespace("matrixStats", quietly = TRUE)) {
+    mx <- matrixStats::colMaxs(leaves, na.rm = TRUE)
+    mx[!is.finite(mx)] <- -1
+    return(as.integer(mx + 1L))
+  }
+  # Fallback loop (no suppressWarnings; handle NA explicitly)
+  res <- integer(Tm)
+  for (tt in seq_len(Tm)) {
+    col <- leaves[, tt]
+    mx  <- if (anyNA(col)) max(col, na.rm = TRUE) else max(col)
+    if (!is.finite(mx)) res[tt] <- 0L else res[tt] <- as.integer(mx) + 1L
+  }
+  res
+}
+
+# Tabulates counts of a given index set into leaf bins of a single tree.
+count_by_leaf <- function(lt, idx, nb) {
+  if (!length(idx) || nb <= 0L) return(integer(max(1L, nb)))
+  tabulate(lt[idx] + 1L, nbins = nb)
+}
+
+# Learn a fixed extreme/background rule on TRAIN and reapply it to any y.
+# Canonical names, disjoint sets, and selectable center/scale for BG band.
+learn_sigma_rule <- function(yvar_train,
+                             extreme_k    = 1,
+                             lower_tail   = FALSE,
+                             bg_band_k    = NULL,                 # NULL → background = !extreme
+                             band_center  = c("mean","median"),   # BG center learned on TRAIN
+                             band_scale   = c("sd","mad")) {      # BG scale learned on TRAIN
+  band_center <- match.arg(band_center)
+  band_scale  <- match.arg(band_scale)
+  
+  # --- Validate TRAIN y -------------------------------------------------------
+  if (!is.numeric(yvar_train)) stop("[learn_sigma_rule] yvar_train must be numeric.")
+  if (!length(yvar_train))     stop("[learn_sigma_rule] yvar_train is empty.")
+  
+  center_val <- if (band_center == "mean") {
+    m <- mean(yvar_train, na.rm = TRUE)
+    if (!is.finite(m)) stop("[learn_sigma_rule] mean(yvar_train) is not finite.")
+    m
+  } else {
+    med <- stats::median(yvar_train, na.rm = TRUE)
+    if (!is.finite(med)) stop("[learn_sigma_rule] median(yvar_train) is not finite.")
+    med
+  }
+  
+  # Scale for extreme threshold is always SD (to mirror common sigma rules)
+  sd_train <- stats::sd(yvar_train, na.rm = TRUE)
+  if (!is.finite(sd_train) || sd_train <= 0)
+    stop("[learn_sigma_rule] sd(yvar_train) <= 0 or not finite.")
+  
+  # Scale for BG band can be SD or MAD (robust), learned on TRAIN
+  scale_val <- if (band_scale == "sd") {
+    s <- stats::sd(yvar_train, na.rm = TRUE)
+    if (!is.finite(s) || s <= 0) stop("[learn_sigma_rule] sd(yvar_train) for BG is not finite/positive.")
+    s
+  } else {
+    md <- stats::mad(yvar_train, constant = 1.4826, na.rm = TRUE)
+    if (!is.finite(md) || md <= 0) stop("[learn_sigma_rule] mad(yvar_train) for BG is not finite/positive.")
+    md
+  }
+  
+  # --- Fixed thresholds learned on TRAIN --------------------------------------
+  thr_ext <- if (!lower_tail) center_val + extreme_k * sd_train
+  else             center_val - extreme_k * sd_train
+  
+  thr_bg  <- if (is.null(bg_band_k)) NULL else {
+    lo <- center_val - bg_band_k * scale_val
+    hi <- center_val + bg_band_k * scale_val
+    c(lo, hi)
+  }
+  
+  # --- Return an object with an apply() that enforces the SAME rule -----------
+  list(
+    # Apply learned thresholds to any numeric vector f (train/test/heldout)
+    apply = function(f) {
+      if (!is.numeric(f)) stop("[learn_sigma_rule/apply] input vector must be numeric.")
+      n <- length(f); if (!n) stop("[learn_sigma_rule/apply] input vector is empty.")
+      
+      # extremes by the fixed TRAIN threshold
+      extr_idx <- if (!lower_tail) which(f >= thr_ext) else which(f <= thr_ext)
+      
+      # background either as band (TRAIN-learned) or !extreme
+      if (is.null(thr_bg)) {
+        bg_idx <- setdiff(seq_len(n), extr_idx)
+      } else {
+        bg_idx <- which(f >= thr_bg[1] & f <= thr_bg[2])
+        # enforce disjointness explicitly
+        if (length(extr_idx)) bg_idx <- setdiff(bg_idx, extr_idx)
+      }
+      
+      # Canonical outputs (sorted, unique)
+      extr_idx <- sort(unique(as.integer(extr_idx)))
+      bg_idx   <- sort(unique(as.integer(bg_idx)))
+      
+      N_extr <- length(extr_idx)
+      N_bg   <- length(bg_idx)
+      
+      if (N_extr <= 0L) stop("[learn_sigma_rule/apply] No rows in extreme set under learned rule.")
+      if (N_bg   <= 0L) stop("[learn_sigma_rule/apply] No rows in background set under learned rule.")
+      if (length(intersect(extr_idx, bg_idx)) > 0L)
+        stop("[learn_sigma_rule/apply] extreme and background indices overlap (should be disjoint).")
+      
+      list(
+        extr_idx = extr_idx,
+        bg_idx   = bg_idx,
+        N_extr   = N_extr,
+        N_bg     = N_bg
+      )
+    },
+    
+    # Expose learned parameters for reproducibility/auditing
+    thr_ext      = thr_ext,                 # scalar extreme threshold (TRAIN)
+    thr_bg       = thr_bg,                  # length-2 band [lo, hi] or NULL
+    center_name  = band_center,
+    scale_name   = band_scale,
+    center_val   = center_val,              # learned on TRAIN
+    sd_train     = sd_train,                # used for extreme threshold
+    scale_val    = scale_val,               # used for BG band
+    extreme_k    = extreme_k,
+    bg_band_k    = bg_band_k,
+    lower_tail   = lower_tail
+  )
+}
+
+#============================
 # Parse model → compact tree table (model → tdt)
-#============================#
-# Purpose: read xgboost booster into a tidy, consistent data.table
+#============================
+# Converts an `xgb.Booster` into a tidy, numeric, per-node `data.table` with consistent schema (Tree, ID, children, split, gain, leaf values, etc.).
 parse_xgb_tree <- function(model) {
   stopifnot(inherits(model, "xgb.Booster"))
   dt <- xgboost::xgb.model.dt.tree(model = model)
   data.table::setDT(dt)
   
   to_int_child <- function(x) {
-    # children look like "0-123" → take the number after the hyphen
+    if (is.null(x)) return(NA_integer_)
     y <- suppressWarnings(as.integer(sub(".*-", "", x)))
     y[is.na(x)] <- NA_integer_
     y
   }
+  to_num <- function(x) suppressWarnings(as.numeric(x))
   
-  if (!"Node" %in% names(dt)) stop("[parse_xgb_tree] column 'Node' not found")
+  if (!"Node" %in% names(dt)) stop("[parse_xgb_tree] column 'Node' not found in xgb dump")
   
-  # Basic normalization
-  dt[, `:=`(
-    Tree = as.integer(Tree),
-    ID   = as.integer(Node)
-  )]
+  dt[, `:=`(Tree = as.integer(Tree), ID = as.integer(Node))]
   
-  for (col in c("Yes", "No", "Missing")) {
+  for (col in c("Yes","No","Missing")) {
     if (col %in% names(dt)) dt[, (col) := to_int_child(get(col))] else dt[, (col) := NA_integer_]
   }
   
   if (!"Split" %in% names(dt)) dt[, Split := NA_real_]
   if (!"Cover" %in% names(dt)) dt[, Cover := NA_real_]
-  dt[, `:=`(Split = suppressWarnings(as.numeric(Split)),
-            Cover = suppressWarnings(as.numeric(Cover)))]
+  dt[, `:=`(Split = to_num(Split), Cover = to_num(Cover))]
   
-  # Leaf flag
   dt[, Leaf := (Feature == "Leaf")]
   
   has_quality <- "Quality" %in% names(dt)
   has_gaincol <- "Gain" %in% names(dt)
+  Q <- if (has_quality) to_num(dt$Quality) else rep(NA_real_, nrow(dt))
+  G <- if (has_gaincol) to_num(dt$Gain)    else rep(NA_real_, nrow(dt))
   
-  # Leaf values and gains
-  if (has_quality) {
-    q <- suppressWarnings(as.numeric(dt$Quality))
-    # Quality = leaf value on leaves; gain on splits
-    dt[, LeafVal := ifelse(Leaf, q, NA_real_)]
-    if (has_gaincol) {
-      g <- suppressWarnings(as.numeric(dt$Gain))
-      dt[, Gain := ifelse(!Leaf, g, NA_real_)]
-    } else {
-      dt[, Gain := ifelse(!Leaf, q, NA_real_)]
-    }
-  } else {
-    # no Quality; try Gain for splits, and Split for leaves as a last resort
-    if (has_gaincol) {
-      g <- suppressWarnings(as.numeric(dt$Gain))
-      dt[, Gain := ifelse(!Leaf, g, NA_real_)]
-    } else {
-      dt[, Gain := NA_real_]
-    }
-    s <- suppressWarnings(as.numeric(dt$Split))
-    dt[, LeafVal := ifelse(Leaf, s, NA_real_)]
-  }
+  dt[, LeafVal := ifelse(Leaf, Q, NA_real_)]
+  dt[Leaf & is.na(LeafVal), LeafVal := Split]
+  dt[, Gain := ifelse(!Leaf, ifelse(!is.na(G), G, Q), NA_real_)]
   
-  # Clean up
-  drop_cols <- intersect(c("Node", "Quality"), names(dt))
+  drop_cols <- intersect(c("Node","Quality"), names(dt))
   if (length(drop_cols)) dt[, (drop_cols) := NULL]
   
   data.table::setkey(dt, Tree, ID)
   data.table::setorder(dt, Tree, ID)
-  
   dt[, .(Tree, ID, Feature, Split, Yes, No, Missing, Leaf, LeafVal, Gain, Cover)]
 }
 
+
 #============================#
-# Structure helpers (tdt → helpers)
+# Structure helpers
 #============================#
-# Builds cached child→parent lookups, per-tree depth maps, and leaf paths.
+# Constructs parent/child maps and depth/path lookup functions for tree navigation.
 build_structure_helpers <- function(tdt) {
   stopifnot(is.data.frame(tdt),
             all(c("Tree","ID","Yes","No","Missing","Leaf","Gain","Cover") %in% names(tdt)))
-  tdt <- as.data.table(tdt)
-  trees <- sort(unique(tdt$Tree))
+  tdt <- data.table::as.data.table(tdt)
+  trees <- sort(unique(tdt$Tree)) #
   
-  # child -> parent maps, per tree
   parent_env <- new.env(parent = emptyenv())
   for (tr in trees) {
     tt <- tdt[Tree == tr, .(ID, Yes, No, Missing)]
@@ -109,7 +308,7 @@ build_structure_helpers <- function(tdt) {
   }
   
   split_gc <- tdt[Leaf == FALSE, .(Tree, ID, Gain, SplitCover = Cover)]
-  setkey(split_gc, Tree, ID)
+  data.table::setkey(split_gc, Tree, ID)
   
   depth_env  <- new.env(parent = emptyenv())
   maxd_env   <- new.env(parent = emptyenv())
@@ -123,8 +322,6 @@ build_structure_helpers <- function(tdt) {
     max_id <- length(pmap) - 1L
     dep <- rep(NA_integer_, max_id + 1L)
     dep[1] <- 0L
-    
-    # BFS queue (preallocated)
     q <- integer(max_id + 1L); head <- 1L; tail <- 1L; q[1] <- 0L
     while (head <= tail) {
       id <- q[head]; head <- head + 1L
@@ -144,13 +341,14 @@ build_structure_helpers <- function(tdt) {
     maxd_env[[key]]  <- max(dep, na.rm = TRUE)
     dep
   }
+  
   get_max_depth <- function(tr) {
     key <- as.character(tr)
     md <- maxd_env[[key]]; if (!is.null(md)) return(md)
     dep <- get_depth_map(tr); if (is.null(dep)) return(0L)
     md <- max(dep, na.rm = TRUE); maxd_env[[key]] <- md; md
   }
-  # root→leaf node IDs + gain/cover along the path
+  
   get_leaf_path <- function(tr, leaf_id) {
     tkey <- as.character(tr)
     env  <- leaf_cache[[tkey]]
@@ -163,7 +361,6 @@ build_structure_helpers <- function(tdt) {
       out <- list(nodes=integer(0), gain=numeric(0), gcover=numeric(0))
       leaf_cache[[tkey]][[as.character(leaf_id)]] <- out; return(out)
     }
-    # path length k
     cur <- leaf_id; k <- 0L
     while (!is.na(cur) && cur != 0L) { par <- pmap[cur + 1L]; if (is.na(par)) break; k <- k + 1L; cur <- par }
     if (k == 0L) {
@@ -171,14 +368,9 @@ build_structure_helpers <- function(tdt) {
       leaf_cache[[tkey]][[as.character(leaf_id)]] <- out; return(out)
     }
     nodes <- integer(k); cur <- leaf_id
-    for (pos in k:1) {
-      par <- pmap[cur + 1L]; nodes[pos] <- par; cur <- par
-      if (is.na(cur) || cur == 0L) break
-    }
+    for (pos in k:1) { par <- pmap[cur + 1L]; nodes[pos] <- par; cur <- par; if (is.na(cur) || cur == 0L) break }
     sgc <- split_gc[.(tr, nodes), .(Gain, SplitCover)]
-    out <- list(nodes = nodes,
-                gain  = as.numeric(sgc$Gain),
-                gcover= as.numeric(sgc$SplitCover))
+    out <- list(nodes = nodes, gain = as.numeric(sgc$Gain), gcover = as.numeric(sgc$SplitCover))
     leaf_cache[[tkey]][[as.character(leaf_id)]] <- out
     out
   }
@@ -188,238 +380,121 @@ build_structure_helpers <- function(tdt) {
        get_leaf_path = get_leaf_path)
 }
 
-
-
-#============================#
-# Path similarity (per-SNP)
-#============================#
-# Returns per-SNP a log-ratio based similarity metric, mean leaf depth, mean leaf cover, and mean leaf value, plus reusable leaves/tdt/helpers.
-compute_snp_similarity <- function(model, X, f_vec,
-                                   lower_tail     = FALSE,
-                                   extreme_k      = 1,
-                                   progress_every = 100,
-                                   show_progress  = TRUE) {
-  .info("[compute_snp_similarity] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
-  stopifnot(inherits(model, "xgb.Booster"))
-  X <- if (inherits(X, "dgCMatrix") || is.matrix(X)) X else as.matrix(X)
-  stopifnot(is.numeric(f_vec), length(f_vec) == nrow(X))
-  
-  ## Extreme set --------------------------------------------------------------
-  mu  <- mean(f_vec, na.rm = TRUE)
-  sdv <- sd(f_vec,  na.rm = TRUE)
-  if (!lower_tail) {
-    thr <- mu + extreme_k * sdv; extreme_idx <- which(f_vec >= thr); tail_dir <- "high"
-  } else {
-    thr <- mu - extreme_k * sdv; extreme_idx <- which(f_vec <= thr); tail_dir <- "low"
-  }
-  if (!length(extreme_idx)) .stop_bad("No rows met the extreme-F criterion; adjust extreme_k/tail.")
-  .info("Extreme-F (%s tail) threshold=%.6f; n_extreme=%d", tail_dir, thr, length(extreme_idx))
-  
-  ## Leaves (n x Tm) ----------------------------------------------------------
-  leaves <- predict(model, X, predleaf = TRUE)
-  if (is.null(dim(leaves))) leaves <- matrix(leaves, ncol = 1L)
-  storage.mode(leaves) <- "integer"
-  n  <- nrow(leaves); Tm <- ncol(leaves)
-  .info("Leaves dim: %d x %d (rows x trees)", n, Tm)
-  
-  ## Trees + helpers -----------------------------------------------------------
-  tdt <- parse_xgb_tree(model)
-  if ((max(tdt$Tree) + 1L) != Tm) {
-    .warn_bad("Tree count mismatch: dump=%d vs leaves=%d.", max(tdt$Tree)+1L, Tm)
-  }
-  .info("Building structure helpers...")
-  helpers <- build_structure_helpers(tdt)
-  
-  ## Accumulators --------------------------------------------------------------
-  loglr_sum      <- numeric(n)  # avg(log(prop_ext / p_leaf))
-  leafdepth_sum  <- numeric(n)  # avg leaf depth
-  leafcover_sum  <- numeric(n)  # avg leaf cover
-  leafval_sum    <- numeric(n)  # avg leaf value
-  
-  m <- length(extreme_idx)
-  
-  ## Per-tree loop -------------------------------------------------------------
-  for (tt in seq_len(Tm)) {
-    tr <- tt - 1L
-    lt <- leaves[, tt]
-    
-    # counts of extreme per leaf in this tree
-    ft_tab <- table(lt[extreme_idx])
-    
-    # extreme SNP frequency per leaf (vectorized to rows)
-    leaf_ids_ext <- as.integer(names(ft_tab))
-    idx_ext <- match(lt, leaf_ids_ext)
-    cnt_ext <- integer(n); hit_ext <- !is.na(idx_ext)
-    if (any(hit_ext)) cnt_ext[hit_ext] <- as.integer(ft_tab[idx_ext[hit_ext]])
-    prop_ext <- cnt_ext / m
-    
-    # total SNP frequency per leaf
-    tab_all <- table(lt)
-    leaf_ids_all <- as.integer(names(tab_all))
-    idx_all <- match(lt, leaf_ids_all)
-    cnt_all <- integer(n); hit_all <- !is.na(idx_all)
-    if (any(hit_all)) cnt_all[hit_all] <- as.integer(tab_all[idx_all[hit_all]])
-    p_leaf  <- cnt_all / n
-    
-    # log-ratio similarity; treat zeros as 0 contribution (instead of -Inf)
-    llr <- ifelse(prop_ext > 0 & p_leaf > 0, log(prop_ext / p_leaf), 0)
-    loglr_sum <- loglr_sum + llr
-    
-    # depth map (index by node id = leaf id)
-    dep_vals <- helpers$get_depth_map(tr)
-    if (!is.null(dep_vals)) {
-      dvec <- dep_vals[lt + 1L]
-      dvec[!is.finite(dvec)] <- 0
-      leafdepth_sum <- leafdepth_sum + dvec
-    }
-    
-    # leaf cover & value
-    leaf_rows <- tdt[Tree == tr & Leaf == TRUE, .(ID, LeafVal, LeafCover = Cover)]
-    if (nrow(leaf_rows)) {
-      data.table::setkey(leaf_rows, ID)
-      LR <- leaf_rows[.(as.integer(lt))]
-      # coalesce NA to 0 before summing
-      cov <- suppressWarnings(as.numeric(LR$LeafCover)); cov[!is.finite(cov)] <- 0
-      val <- suppressWarnings(as.numeric(LR$LeafVal));   val[!is.finite(val)] <- 0
-      leafcover_sum <- leafcover_sum + cov
-      leafval_sum   <- leafval_sum   + val
-    }
-    
-    if (show_progress && (tt %% progress_every == 0L || tt == Tm)) {
-      .info("processed %d/%d trees (%.1f%%)", tt, Tm, 100*tt/Tm)
-      if ((tt %% 50L) == 0L) gc(FALSE)
-    }
-  }
-  
-  ## Final per-SNP metrics -----------------------------------------------------
-  summaries <- data.table::data.table(
-    row             = seq_len(n),
-    F               = as.numeric(f_vec),
-    sim_logLR       = loglr_sum     / Tm,
-    mean_leaf_depth = leafdepth_sum / Tm,
-    mean_leaf_cover = leafcover_sum / Tm,
-    mean_leaf_value = leafval_sum   / Tm
-  )
-  
-  list(
-    summaries   = summaries,
-    leaves      = leaves,
-    tdt         = tdt,
-    helpers     = helpers,
-    extreme_idx = extreme_idx,
-    tail_dir    = if (lower_tail) "low" else "high"
-  )
-}
-
-#============================#
-# Build per-leaf steps 
-#============================#
-# Yields long table: (Tree, leaf_id, depth, feature, direction, split, thresh_bin)
+#============================
+# Build per-leaf steps
+#============================
+# Generates per-leaf decision paths (feature, direction, threshold bins) from tree structure and leaves
 build_leaf_steps <- function(leaves,
                              tdt,
                              helpers,
-                             # Binning control
-                             binning         = c("digits", "adaptive"),
-                             bin_digits      = 3L,      # used if binning == "digits"
-                             # Adaptive-binning knobs (used if binning == "adaptive")
-                             target_bins     = 8L,      # aim ~this many per-feature bins
-                             min_per_bin     = 50L,     # avoid tiny bins across all trees/uses
-                             winsor_prob     = 0.01,    # trim tails for stability (two-sided)
-                             method          = c("fd", "quantile"),
-                             # Back-compat shim (ignored unless provided)
-                             min_bin         = NULL,    # deprecated; mapped to min_per_bin if given
-                             # Performance
-                             trees_per_batch = 200L,
-                             progress_every  = 500L) {
-  
-  .info("[build_leaf_steps] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+                             target_bins     = 10L,
+                             min_per_bin     = 50L,
+                             winsor_prob     = 0.01,
+                             method          = c("fd","quantile"),
+                             trees_per_batch = 250L,
+                             progress_every  = 1000L) {
+  message(sprintf("[build_leaf_steps] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   stopifnot(is.matrix(leaves) || inherits(leaves, "dgCMatrix"))
+  method <- match.arg(method)
   Tm <- ncol(leaves)
   
-  # ---- normalize args / back-compat ----
-  binning <- match.arg(binning)
-  method  <- match.arg(method)
-  if (!is.null(min_bin)) {
-    .warn_bad("Argument 'min_bin' is deprecated; using it as min_per_bin = %s", as.integer(min_bin))
-    min_per_bin <- as.integer(min_bin)
-  }
-  
-  # ---- index tdt for fast joins ----
   tdt <- data.table::as.data.table(tdt)
   data.table::setkey(tdt, Tree, ID)
   
-  # ---- helpers: build raw steps (no binning yet) ----
-  build_raw_steps_batch <- function(tt) {
-    tr <- tt - 1L
-    lt <- leaves[, tt]
-    uleaf <- sort(unique(as.integer(lt)))
-    if (!length(uleaf)) return(data.table::data.table())
-    
-    tt_dt <- tdt[.(tr)]
-    step_rows <- vector("list", length(uleaf)); si <- 1L
-    
-    for (leaf_id in uleaf) {
-      lp <- helpers$get_leaf_path(tr, leaf_id)
-      pn <- lp$nodes
-      if (!length(pn)) { step_rows[[si]] <- NULL; si <- si + 1L; next }
-      
-      parents <- tt_dt[.(tr, pn)]
-      yes  <- parents$Yes
-      no   <- parents$No
-      mis  <- parents$Missing
-      feat <- parents$Feature
-      splt <- parents$Split
-      
-      k <- length(pn)
-      child_along <- integer(k)
-      for (i in seq_len(k)) {
-        next_child <- if (i < k) pn[i + 1L] else leaf_id
-        child_along[i] <- next_child
+  build_raw_steps_batch <- function(batch_start, batch_end) {
+    total_steps <- 0L
+    meta <- vector("list", batch_end - batch_start + 1L); mi <- 1L
+    for (tt in batch_start:batch_end) {
+      tr <- tt - 1L
+      lt <- leaves[, tt]
+      uleaf <- sort(unique(as.integer(lt)))
+      meta[[mi]] <- list(tt = tt, tr = tr, uleaf = uleaf)
+      if (length(uleaf)) {
+        for (leaf_id in uleaf) {
+          pn <- helpers$get_leaf_path(tr, leaf_id)$nodes
+          if (length(pn)) total_steps <- total_steps + length(pn)
+        }
       }
-      direction <- ifelse(yes == child_along, "<",
-                          ifelse(no == child_along, ">=", "missing"))
-      depth <- seq.int(0L, k - 1L)
-      
-      step_rows[[si]] <- data.table::data.table(
-        Tree       = tr,
-        leaf_id    = as.integer(leaf_id),
-        depth      = as.integer(depth),
-        feature    = as.character(feat),
-        direction  = as.character(direction),
-        split      = suppressWarnings(as.numeric(splt))
-      )
-      si <- si + 1L
+      mi <- mi + 1L
+    }
+    if (total_steps == 0L) {
+      return(data.table::data.table(Tree = integer(0), leaf_id = integer(0),
+                                    depth = integer(0), feature = character(0),
+                                    direction = character(0), split_val = numeric(0)))
     }
     
-    data.table::rbindlist(step_rows, use.names = TRUE, fill = TRUE)
+    Tree_v  <- integer(total_steps)
+    Leaf_v  <- integer(total_steps)
+    Depth_v <- integer(total_steps)
+    Feat_v  <- character(total_steps)
+    Dir_v   <- character(total_steps)
+    Split_v <- numeric(total_steps)
+    cursor  <- 0L
+    
+    for (m in meta) {
+      tt <- m$tt; tr <- m$tr; uleaf <- m$uleaf
+      if (!length(uleaf)) next
+      tt_dt <- tdt[.(tr)]
+      if (!nrow(tt_dt)) next
+      
+      maxid <- max(tt_dt$ID, na.rm = TRUE)
+      yesA  <- rep.int(NA_integer_,  maxid + 1L);  yesA [tt_dt$ID + 1L] <- tt_dt$Yes
+      noA   <- rep.int(NA_integer_,  maxid + 1L);  noA  [tt_dt$ID + 1L] <- tt_dt$No
+      featA <- rep.int(NA_character_,maxid + 1L);  featA[tt_dt$ID + 1L] <- as.character(tt_dt$Feature)
+      spltA <- rep.int(NA_real_,     maxid + 1L);  spltA[tt_dt$ID + 1L] <- suppressWarnings(as.numeric(tt_dt$Split))
+      
+      for (leaf_id in uleaf) {
+        pn <- helpers$get_leaf_path(tr, leaf_id)$nodes
+        k  <- length(pn)
+        if (!k) next
+        child_along <- integer(k)
+        if (k > 1L) child_along[1:(k-1L)] <- pn[2:k]
+        child_along[k] <- leaf_id
+        parents <- pn + 1L
+        yes  <- yesA [parents]
+        no   <- noA  [parents]
+        feat <- featA[parents]
+        splt <- spltA[parents]
+        dir <- ifelse(yes == child_along, "<", ifelse(no == child_along, ">=", "missing"))
+        
+        rng <- (cursor + 1L):(cursor + k)
+        Tree_v [rng] <- tr
+        Leaf_v [rng] <- leaf_id
+        Depth_v[rng] <- 0L:(k - 1L)
+        Feat_v [rng] <- feat
+        Dir_v  [rng] <- dir
+        Split_v[rng] <- splt
+        cursor <- cursor + k
+      }
+    }
+    
+    data.table::data.table(
+      Tree      = Tree_v,
+      leaf_id   = Leaf_v,
+      depth     = Depth_v,
+      feature   = Feat_v,
+      direction = Dir_v,
+      split_val = Split_v
+    )
   }
   
-  # ---- stream trees in batches to control RAM ----
   out_list <- vector("list", ceiling(Tm / trees_per_batch)); oi <- 1L
   for (batch_start in seq(1L, Tm, by = trees_per_batch)) {
     batch_end <- min(batch_start + trees_per_batch - 1L, Tm)
-    rows_batch <- vector("list", length = batch_end - batch_start + 1L); bi <- 1L
-    
-    for (tt in batch_start:batch_end) {
-      rows_batch[[bi]] <- build_raw_steps_batch(tt)
-      bi <- bi + 1L
-      if ((tt %% progress_every) == 0L || tt == Tm) {
-        message(sprintf("[build_leaf_steps] built up to tree %d / %d (%.1f%%)", tt, Tm, 100*tt/Tm))
-      }
+    out_list[[oi]] <- build_raw_steps_batch(batch_start, batch_end); oi <- oi + 1L
+    if (!is.null(progress_every) && progress_every > 0L &&
+        ((batch_end %% progress_every) == 0L || batch_end == Tm)) {
+      message(sprintf("[build_leaf_steps] built steps up to tree %d / %d (%.1f%%)",
+                      batch_end, Tm, 100*batch_end/Tm))
     }
-    
-    out_list[[oi]] <- data.table::rbindlist(rows_batch, use.names = TRUE, fill = TRUE)
-    oi <- oi + 1L
-    gc(FALSE)
   }
   
   LS <- data.table::rbindlist(out_list, use.names = TRUE, fill = TRUE)
   if (!nrow(LS)) {
     data.table::setkey(LS, Tree, leaf_id)
-    return(LS[])
+    return(LS[, .(Tree, leaf_id, depth, feature, direction, thresh_bin = numeric())])
   }
   
-  # ---- normalize columns ----
   LS <- LS[!is.na(feature) & nzchar(feature)]
   LS[, `:=`(
     Tree      = as.integer(Tree),
@@ -427,42 +502,24 @@ build_leaf_steps <- function(leaves,
     depth     = as.integer(depth),
     feature   = as.character(feature),
     direction = as.character(direction),
-    split     = as.numeric(split)
+    split_val = as.numeric(split_val)
   )]
   
-  # ---- binning: digits vs adaptive ----
-  if (binning == "digits") {
-    # classic behavior
-    LS[, thresh_bin := base::signif(split, as.integer(bin_digits))]
-    data.table::setkey(LS, Tree, leaf_id)
-    return(LS[])
-  }
+  message(sprintf("[build_leaf_steps] adaptive bins per feature: target=%d, min_per_bin=%d, method=%s, winsor=%.3g",
+        as.integer(target_bins), as.integer(min_per_bin), method, as.numeric(winsor_prob)))
   
-  # ---- adaptive binning per feature ----
-  # Winsorize tails, derive breaks via FD (or quantile), enforce min_per_bin by merging adjacent sparse bins.
-  .info("[build_leaf_steps] computing adaptive bins per feature (target_bins=%d, min_per_bin=%d, method=%s, winsor=%.3g)",
-        as.integer(target_bins), as.integer(min_per_bin), method, as.numeric(winsor_prob))
-  
-  LS_split <- LS[is.finite(split)]
+  LS_split <- LS[is.finite(split_val)]
   feats <- sort(unique(LS_split$feature))
-  
-  # envs to store per-feature breaks and midpoints
-  breaks_env <- new.env(parent = emptyenv())
-  mids_env   <- new.env(parent = emptyenv())
+  breaks_env <- new.env(parent = emptyenv()); mids_env <- new.env(parent = emptyenv())
   
   propose_breaks <- function(v, max_bins, method, winsor) {
-    v <- sort(v[is.finite(v)])
-    if (length(v) <= 1L) return(range(v, na.rm = TRUE))
+    v <- sort(v[is.finite(v)]); if (length(v) <= 1L) { r <- range(v, na.rm=TRUE); if(!all(is.finite(r))) r <- c(0,0); return(unique(c(r[1], r[2]))) }
     lo <- suppressWarnings(stats::quantile(v, probs = winsor, names = FALSE))
     hi <- suppressWarnings(stats::quantile(v, probs = 1 - winsor, names = FALSE))
-    v  <- v[v >= lo & v <= hi]
-    if (length(v) <= 1L) return(range(v, na.rm = TRUE))
-    
+    v  <- v[v >= lo & v <= hi]; if (length(v) <= 1L) { r <- range(v, na.rm=TRUE); if(!all(is.finite(r))) r <- c(0,0); return(unique(c(r[1], r[2]))) }
     if (method == "fd") {
-      h <- 2 * stats::IQR(v) / (length(v)^(1/3))
-      if (!is.finite(h) || h <= 0) h <- (max(v) - min(v)) / max(2L, max_bins)
-      nb <- ceiling((max(v) - min(v)) / max(h, .Machine$double.eps))
-      nb <- min(max(nb, 2L), max_bins)
+      h <- 2 * stats::IQR(v) / (length(v)^(1/3)); if (!is.finite(h) || h <= 0) h <- (max(v) - min(v)) / max(2L, max_bins)
+      nb <- ceiling((max(v) - min(v)) / max(h, .Machine$double.eps)); nb <- min(max(nb, 2L), max_bins)
       br <- pretty(v, n = nb)
     } else {
       nb <- max(2L, as.integer(max_bins))
@@ -470,78 +527,233 @@ build_leaf_steps <- function(leaves,
       br <- unique(stats::quantile(v, probs = probs, names = FALSE, type = 7))
       if (length(br) < 3L) br <- pretty(v, n = min(max_bins, 3L))
     }
-    br <- sort(unique(as.numeric(br)))
-    if (length(br) < 3L) br <- unique(c(min(v), median(v), max(v)))
+    br <- sort(unique(as.numeric(br))); if (length(br) < 2L) br <- unique(c(min(v), max(v))); br
+  }
+  enforce_min_bin <- function(v, br, target_bins, min_per_bin) {
+    if (length(br) < 2L) return(br)
+    repeat {
+      idx <- findInterval(v, br, all.inside = TRUE)
+      tab <- tabulate(idx, nbins = length(br) - 1L)
+      if ((length(tab) <= target_bins) && all(tab >= min_per_bin | tab == 0L)) break
+      k <- if (length(tab)) which.min(tab) else 1L
+      if (length(tab) <= 1L) break
+      rm_pos <- if (k == 1L) 2L else if (k == length(tab)) length(tab) else if (tab[k - 1L] <= tab[k + 1L]) k else k + 1L
+      br <- br[-rm_pos]; if (length(br) < 2L) { br <- br[1:2]; break }
+    }
     br
   }
   
   for (f in feats) {
-    v <- LS_split[feature == f, split]
-    if (!length(v)) next
+    v  <- LS_split[feature == f, split_val]; if (!length(v)) next
     br <- propose_breaks(v, max_bins = as.integer(target_bins), method = method, winsor = as.numeric(winsor_prob))
-    
-    # enforce min_per_bin by merging sparse neighbors
-    bin_idx <- findInterval(v, br, all.inside = TRUE)
-    tab <- tabulate(bin_idx, nbins = length(br) - 1L)
-    
-    while ((any(tab < min_per_bin)) && (length(tab) > 2L)) {
-      k <- which.min(tab)
-      if (k == 1L) {
-        rm_pos <- 2L
-      } else if (k == length(tab)) {
-        rm_pos <- length(tab)    # drop last internal break
-      } else {
-        rm_pos <- if (tab[k - 1L] <= tab[k + 1L]) k + 1L else k + 1L  # boundary on right of the smaller neighbor
-      }
-      br <- br[-rm_pos]
-      bin_idx <- findInterval(v, br, all.inside = TRUE)
-      tab <- tabulate(bin_idx, nbins = length(br) - 1L)
-      # hard cap: keep bins <= target_bins
-      if ((length(tab) > target_bins)) {
-        k2 <- which.min(tab)
-        if (k2 == 1L) br <- br[-2L] else br <- br[-(k2 + 1L)]
-        bin_idx <- findInterval(v, br, all.inside = TRUE)
-        tab <- tabulate(bin_idx, nbins = length(br) - 1L)
-      }
-    }
-    
+    br <- enforce_min_bin(v, br, target_bins = as.integer(target_bins), min_per_bin = as.integer(min_per_bin))
+    if (length(br) < 2L) { r <- range(v, na.rm=TRUE); if(!all(is.finite(r))) r <- c(0,0); br <- unique(c(r[1], r[2])) }
     mids <- (br[-1L] + br[-length(br)]) / 2
-    breaks_env[[f]] <- br
-    mids_env[[f]]   <- mids
+    breaks_env[[f]] <- br; mids_env[[f]] <- mids
   }
   
-  # stamp thresh_bin by feature
   LS[, thresh_bin := {
-    br <- breaks_env[[feature[1L]]]
-    md <- mids_env[[feature[1L]]]
-    if (is.null(br) || is.null(md) || !is.finite(split[1L])) {
-      NA_real_
-    } else {
-      idx <- findInterval(split, br, all.inside = TRUE)
-      as.numeric(md[idx])
+    br <- breaks_env[[feature[1L]]]; md <- mids_env[[feature[1L]]]
+    if (is.null(br) || is.null(md) || !is.finite(split_val[1L])) rep(NA_real_, .N) else {
+      idx <- findInterval(split_val, br, all.inside = TRUE); as.numeric(md[idx])
     }
   }, by = feature]
   
+  LS[, split_val := NULL]
   data.table::setkey(LS, Tree, leaf_id)
   LS[]
 }
 
+#============================
+# Build (Tree,leaf) rule strings
+#============================
+.format_num <- function(x) formatC(as.numeric(x), format = "e", digits = 2)
 
-#============================#
-# Feature concentration (per SNP)
-#============================#
-# Input can be long (feature/depth) or wide (path_features list)
-per_leaf_topk_share <- function(leaf_steps,
-                                top_k = 2L,
-                                progress_every = 5000L) {
+# Converts per-leaf decision paths into canonical rule strings, optionally tightening redundant splits.
+build_path_rule_strings <- function(leaf_steps, max_depth = 4L, tighten_monotone = TRUE) {
+  LS <- data.table::as.data.table(leaf_steps)
+  need <- c("Tree","leaf_id","depth","feature","direction","thresh_bin")
+  miss <- setdiff(need, names(LS))
+  if (length(miss)) stop(sprintf("[paths] leaf_steps missing: %s", paste(miss, collapse=", ")))
+  LS[, `:=`(
+    Tree       = as.integer(Tree),
+    leaf_id    = as.integer(leaf_id),
+    depth      = as.integer(depth),
+    feature    = as.character(feature),
+    direction  = as.character(direction),
+    thresh_bin = as.numeric(thresh_bin)
+  )]
+  LS <- LS[depth < as.integer(max_depth)]
+  data.table::setorder(LS, Tree, leaf_id, depth)
+  
+  if (isTRUE(tighten_monotone)) {
+    eps <- 1e-12
+    LS_tight <- LS[, {
+      out <- list(cond = character(0), depth = integer(0))
+      best_ge <- new.env(parent = emptyenv()); best_lt <- new.env(parent = emptyenv())
+      for (i in seq_len(.N)) {
+        f <- feature[i]; d <- direction[i]; b <- thresh_bin[i]; keep <- TRUE
+        if (d == ">=") { cur <- best_ge[[f]]; if (is.null(cur) || b > cur + eps) best_ge[[f]] <- b else keep <- FALSE }
+        else if (d == "<") { cur <- best_lt[[f]]; if (is.null(cur) || b < cur - eps) best_lt[[f]] <- b else keep <- FALSE }
+        if (keep) { out$cond <- c(out$cond, paste0(f, " ", d, " ", .format_num(b))); out$depth <- c(out$depth, depth[i]) }
+      }
+      if (length(out$cond)) .(cond = out$cond, depth = out$depth) else NULL
+    }, by = .(Tree, leaf_id)]
+  } else {
+    LS_tight <- LS[, .(cond = paste0(feature, " ", direction, " ", .format_num(thresh_bin)),
+                       depth = depth),
+                   by = .(Tree, leaf_id)]
+  }
+  
+  PATHS <- LS_tight[, .(
+    rule_len  = .N,
+    rule_str  = paste(cond, collapse = " | "),
+    depth_max = max(depth)
+  ), by = .(Tree, leaf_id)]
+  data.table::setkey(PATHS, Tree, leaf_id)
+  PATHS[]
+}
+
+#============================
+# Path similarity (per-SNP)
+#============================
+# Computes per-row similarity scores (log-likelihood ratios, mean depth, cover, leaf value) between extreme and background sets.
+compute_snp_similarity <- function(model, X, yvar_train,
+                                   lower_tail     = FALSE,
+                                   extreme_k      = 1,
+                                   extreme_idx    = NULL,
+                                   bg_idx         = NULL,
+                                   bg_band_k      = NULL,
+                                   band_center    = c("mean","median"),
+                                   band_scale     = c("sd","mad"),
+                                   progress_every = NULL,
+                                   leaves_override    = NULL,
+                                   compute_depth      = TRUE,
+                                   compute_leaf_stats = TRUE) {
+  message(sprintf("[compute_snp_similarity] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+  stopifnot(inherits(model, "xgb.Booster"))
+  X <- if (inherits(X, "dgCMatrix") || is.matrix(X)) X else as.matrix(X)
+  .require_numeric_vec(yvar_train, "compute_snp_similarity:yvar_train")
+  if (length(yvar_train) != nrow(X)) stop("[compute_snp_similarity] length(yvar_train) != nrow(X).")
+  .require_finite_center_scale(yvar_train, "compute_snp_similarity:yvar_train")
+  band_center <- match.arg(band_center); band_scale <- match.arg(band_scale)
+  
+  n <- nrow(X)
+  idx <- derive_yvar_idx(
+    y             = yvar_train,
+    n             = n,
+    lower_tail    = lower_tail,         
+    extreme_k     = extreme_k,             
+    extreme_idx   = extreme_idx,
+    bg_idx        = bg_idx,          
+    bg_band_k     = bg_band_k,
+    band_center   = band_center,
+    band_scale    = band_scale
+  )
+  
+  extr_idx   <- idx$extr_idx
+  bg_idx     <- idx$bg_idx
+  N_extr     <- idx$N_extr
+  N_bg       <- idx$N_bg
+
+  inv_N_extr <- if (N_extr > 0L) 1 / N_extr else 0
+  inv_N_bg   <- if (N_bg > 0L) 1 / N_bg else 0
+  eps <- 1e-12
+  
+  leaves <- if (is.null(leaves_override)) predict(model, X, predleaf = TRUE) else leaves_override
+  if (is.null(dim(leaves))) leaves <- matrix(leaves, ncol = 1L)
+  if (nrow(leaves) != n) stop("[compute_snp_similarity] nrow(leaves) must equal nrow(X).")
+  storage.mode(leaves) <- "integer"
+  Tm <- ncol(leaves)
+  tdt <- parse_xgb_tree(model)
+  if ((max(tdt$Tree) + 1L) != Tm) stop(sprintf("[compute_snp_similarity] Tree count mismatch: dump=%d vs leaves=%d.", max(tdt$Tree)+1L, Tm))
+  
+  helpers <- build_structure_helpers(tdt)
+  nb_vec <- precompute_nb_vec(leaves)
+  
+  depth_map <- if (isTRUE(compute_depth)) {
+    out <- vector("list", Tm); for (tt in seq_len(Tm)) out[[tt]] <- helpers$get_depth_map(tt - 1L); out
+  } else NULL
+  
+  leaf_cover <- leaf_value <- NULL
+  if (isTRUE(compute_leaf_stats)) {
+    leaf_cover <- vector("list", Tm); leaf_value <- vector("list", Tm)
+    for (tr in sort(unique(tdt$Tree))) {
+      tt_dt <- tdt[Tree == tr & Leaf == TRUE, .(ID, Cover, LeafVal)]
+      if (!nrow(tt_dt)) next
+      nb <- max(tt_dt$ID) + 1L
+      cov <- numeric(nb); val <- numeric(nb)
+      cov[tt_dt$ID + 1L] <- as.numeric(tt_dt$Cover)
+      val[tt_dt$ID + 1L] <- as.numeric(tt_dt$LeafVal)
+      leaf_cover[[tr + 1L]] <- cov; leaf_value[[tr + 1L]] <- val
+    }
+  }
+  
+  loglr_sum     <- numeric(n)
+  leafdepth_sum <- if (isTRUE(compute_depth))      numeric(n) else NULL
+  leafcover_sum <- if (isTRUE(compute_leaf_stats)) numeric(n) else NULL
+  leafval_sum   <- if (isTRUE(compute_leaf_stats)) numeric(n) else NULL
+  
+  for (tt in seq_len(Tm)) {
+    tr <- tt - 1L
+    lt <- leaves[, tt]
+    nb <- nb_vec[tt]; if (nb <= 0L) next
+    count_extr_vec <- count_by_leaf(lt, extr_idx, nb)
+    count_bg_vec   <- count_by_leaf(lt, bg_idx,   nb)
+    pE_leaf  <- count_extr_vec * inv_N_extr
+    pB_leaf  <- count_bg_vec   * inv_N_bg
+    llr_leaf <- log((pE_leaf + eps) / (pB_leaf + eps))
+    loglr_sum <- loglr_sum + llr_leaf[lt + 1L]
+    
+    if (isTRUE(compute_depth)) {
+      dep_vals <- depth_map[[tt]]
+      if (!is.null(dep_vals)) {
+        dv <- dep_vals[lt + 1L]; dv[!is.finite(dv)] <- 0
+        leafdepth_sum <- leafdepth_sum + dv
+      }
+    }
+    if (isTRUE(compute_leaf_stats)) {
+      if (!is.null(leaf_cover[[tt]])) leafcover_sum <- leafcover_sum + leaf_cover[[tt]][lt + 1L]
+      if (!is.null(leaf_value[[tt]])) leafval_sum   <- leafval_sum   + leaf_value[[tt]][lt + 1L]
+    }
+    
+    if (!is.null(progress_every) && progress_every > 0L &&
+        (tt %% progress_every == 0L || tt == Tm)) {
+      message(sprintf("[compute_snp_similarity] processed %d/%d trees (%.1f%%)", 
+                       tt, Tm, 100 * tt / Tm))
+    }
+  }
+  
+  summaries <- data.table::data.table(
+    row             = seq_len(n),
+    yvar            = as.numeric(yvar_train),
+    sim_logLR       = loglr_sum     / Tm,
+    mean_leaf_depth = if (isTRUE(compute_depth))      leafdepth_sum / Tm else NA_real_,
+    mean_leaf_cover = if (isTRUE(compute_leaf_stats)) leafcover_sum / Tm else NA_real_,
+    mean_leaf_value = if (isTRUE(compute_leaf_stats)) leafval_sum   / Tm else NA_real_
+  )
+  
+  list(
+    summaries   = summaries,
+    leaves      = leaves,
+    tdt         = tdt,
+    helpers     = helpers,
+    extreme_idx = extr_idx,
+    bg_idx      = bg_idx,
+    tail_dir    = if (lower_tail) "low" else "high"
+  )
+}
+
+#============================
+# Feature concentration 
+#============================
+# Calculates how concentrated each leaf’s decision path is in its top-k features.
+per_leaf_topk_share <- function(leaf_steps, top_k = 2L, progress_every = 5000L) {
   stopifnot(data.table::is.data.table(leaf_steps) || is.data.frame(leaf_steps))
   LS <- data.table::as.data.table(leaf_steps)
-  
-  has_long  <- "feature" %in% names(LS)
-  has_list  <- "path_features" %in% names(LS)
+  has_long <- "feature" %in% names(LS); has_list <- "path_features" %in% names(LS)
   if (!has_long && !has_list) stop("[per_leaf_topk_share] Need 'feature' (long) or 'path_features' (list).")
   
-  # Count occurrences per (Tree, leaf_id, feature)
   if (has_long) {
     counts <- LS[!is.na(feature) & nzchar(feature),
                  .(count = .N),
@@ -554,8 +766,7 @@ per_leaf_topk_share <- function(leaf_steps,
     counts <- counts[!is.na(feature) & nzchar(feature)][, .(count = .N), by = .(Tree, leaf_id, feature)]
   }
   
-  # Share of top_k features along path
-  setorder(counts, Tree, leaf_id, -count)
+  data.table::setorder(counts, Tree, leaf_id, -count)
   perleaf <- counts[, {
     s <- sum(count)
     if (s == 0L) list(topk_share = NA_real_) else list(topk_share = sum(head(count, min(top_k, .N))) / s)
@@ -564,17 +775,13 @@ per_leaf_topk_share <- function(leaf_steps,
   if (nrow(perleaf) > progress_every) {
     message(sprintf("[per_leaf_topk_share] computed for %s leaves.", format(nrow(perleaf), big.mark=",")))
   }
-  setkey(perleaf, Tree, leaf_id)
+  data.table::setkey(perleaf, Tree, leaf_id)
   perleaf[]
 }
 
-
-# Map per-leaf topk_share → per-SNP by row-mean across trees in chunks.
-feature_concentration_per_snp <- function(leaves,
-                                          perleaf_share,
-                                          chunk_rows = 2000L,
-                                          progress_every = 10000L) {
-  .info("[feature_concentration_per_snp] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+# Aggregates per-leaf feature concentration into per-row (SNP) averages across trees.
+feature_concentration_per_snp <- function(leaves, perleaf_share, chunk_rows = 2000L, progress_every = 10000L) {
+  message(sprintf("[feature_concentration_per_snp] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   stopifnot(is.matrix(leaves) || inherits(leaves, "dgCMatrix"))
   P <- data.table::as.data.table(perleaf_share)
   stopifnot(all(c("Tree","leaf_id","topk_share") %in% names(P)))
@@ -603,424 +810,322 @@ feature_concentration_per_snp <- function(leaves,
     }
     rm(m); gc(FALSE)
   }
-  
   data.table::data.table(row = seq_len(n), feature_conc_top2_share = res)
 }
 
-
-# Harvest exact tree-path rules (one rule per (Tree, leaf_id)), then score them.
-# Arguments:
-#   leaves         : integer matrix n x Tm from predict(..., predleaf=TRUE)
-#   leaf_steps     : data.table with columns: Tree, leaf_id, depth, feature, direction, split/thresh_bin
-#   extreme_rows   : integer vector of extreme SNP row ids (1..n)
-#   max_depth      : keep only paths with <= max_depth splits (depth counted as number of conditions)
-#   min_support    : keep only rules seen in at least this many SNPs (ext+bg)
-#   trees_subset   : optional integer vector of tree indices (0-based) to limit harvesting (e.g., top-KL trees)
-#   pool_identical : if TRUE, merge rules with identical ordered condition strings across trees
-#   progress_every : progress heartbeat
-harvest_path_rules <- function(leaves,
-                               leaf_steps,
-                               extreme_rows,
-                               max_depth      = 4L,
-                               min_support    = 20L,
-                               trees_subset   = NULL,   # e.g., select_trees_by_separation(...)$Tree
-                               pool_identical = TRUE,
-                               progress_every = 500L) {
+#============================
+# Harvest path rules (TRAIN)
+#============================
+# Extracts all candidate rules from training leaves, scoring them on extreme vs. background rows with statistics and medians.
+harvest_path_rules <- function(
+    leaves,
+    leaf_steps,
+    yvar_train        = NULL,  # optional if extreme_idx & bg_idx provided
+    extreme_idx       = NULL,
+    lower_tail        = FALSE,
+    extreme_k         = 1,
+    bg_idx            = NULL,
+    bg_band_k         = NULL,
+    band_center       = c("mean","median"),
+    band_scale        = c("sd","mad"),
+    max_depth         = 4L,
+    min_support       = 20L,
+    trees_subset      = NULL,   # 0-based tree ids
+    pool_identical    = TRUE,
+    trees_per_batch   = 250L,
+    progress_every    = 1000L,
+    tighten_monotone  = TRUE
+) {
+  message(sprintf("[harvest_path_rules] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   stopifnot(is.matrix(leaves) || inherits(leaves, "dgCMatrix"))
-  LS <- data.table::as.data.table(leaf_steps)
-  need <- c("Tree","leaf_id","depth","feature","direction")
-  if (!all(need %in% names(LS))) stop(sprintf("[harvest] leaf_steps missing: %s", paste(setdiff(need, names(LS)), collapse=", ")))
-  # Need a bin label; prefer thresh_bin; fall back to split if needed
-  if (!("thresh_bin" %in% names(LS))) {
-    if (!("split" %in% names(LS))) stop("[harvest] leaf_steps needs either 'thresh_bin' or raw 'split'")
-    LS[, thresh_bin := as.numeric(split)]
-  } else {
-    LS[, thresh_bin := as.numeric(thresh_bin)]
+  
+  band_center <- match.arg(band_center); band_scale <- match.arg(band_scale)
+  
+  # yvar is:
+  # - optional if both extr/bg idx are supplied (used only for medians if provided)
+  # - mandatory if extr/bg idx are not supplied
+  if (is.null(extreme_idx) || is.null(bg_idx)) {
+    if (is.null(yvar_train)) stop("[harvest_path_rules] yvar_train is required when extreme_idx/bg_idx are not provided.")
+    .require_numeric_vec(yvar_train, "harvest_path_rules:yvar_train")
+    if (length(yvar_train) != nrow(leaves)) stop("[harvest_path_rules] length(yvar_train) != nrow(leaves).")
+    .require_finite_center_scale(yvar_train, "harvest_path_rules:yvar_train")
+  } else if (!is.null(yvar_train)) {
+    # yvar only used for medians; basic numeric/length check if present
+    .require_numeric_vec(yvar_train, "harvest_path_rules:yvar_train")
+    if (length(yvar_train) != nrow(leaves)) stop("[harvest_path_rules] length(yvar_train) != nrow(leaves).")
   }
-  LS[, `:=`(Tree = as.integer(Tree),
-            leaf_id = as.integer(leaf_id),
-            depth   = as.integer(depth),
-            feature = as.character(feature),
-            direction = as.character(direction))]
-  data.table::setorder(LS, Tree, leaf_id, depth)
-  data.table::setkey(LS, Tree, leaf_id)
   
+  # Globals
   n  <- nrow(leaves); Tm <- ncol(leaves)
-  extreme_rows <- as.integer(unique(extreme_rows))
-  is_extreme <- logical(n); is_extreme[extreme_rows] <- TRUE
-  N_extreme <- sum(is_extreme); N_bg <- n - N_extreme
-  if (N_extreme <= 0L || N_bg <= 0L) stop("[harvest] Need both extreme and background SNPs.")
   
-  # Optional tree restriction (0-based)
-  all_trees0 <- 0:(Tm-1L)
+  # Canonical PATHS (drop unused cols early)
+  PATHS_full <- build_path_rule_strings(leaf_steps, max_depth = max_depth, tighten_monotone = tighten_monotone)
+  PATHS <- PATHS_full[, .(Tree, leaf_id, rule_str)]
+  data.table::setkey(PATHS, Tree, leaf_id)
+  
+  # Derive/validate indices
+  idx <- derive_yvar_idx(
+    y           = if (is.null(extreme_idx) || is.null(bg_idx)) yvar_train else numeric(n), # not used if both idx given
+    n           = n,
+    lower_tail  = lower_tail,
+    extreme_k   = extreme_k,
+    extreme_idx = extreme_idx,
+    bg_idx      = bg_idx,
+    bg_band_k   = bg_band_k,
+    band_center = band_center,
+    band_scale  = band_scale,
+    check_y_stats = (is.null(extreme_idx) || is.null(bg_idx) || !is.null(bg_band_k))
+  )
+  extr_idx  <- idx$extr_idx
+  bg_idx    <- idx$bg_idx
+  N_extr    <- idx$N_extr
+  N_bg      <- idx$N_bg
+  base_rate <- idx$base_rate
+  
+  # Tree subset → column indices
+  all_trees0 <- 0:(Tm - 1L)
   if (!is.null(trees_subset)) {
     trees_subset <- as.integer(sort(unique(trees_subset)))
     trees_subset <- trees_subset[trees_subset %in% all_trees0]
     if (!length(trees_subset)) stop("[harvest] trees_subset empty after filtering")
-    use_tt <- (trees_subset + 1L) # convert to 1-based column index into leaves
+    use_tt <- trees_subset + 1L
   } else {
     use_tt <- seq_len(Tm)
   }
   
-  # Build per-(Tree, leaf) ordered rule strings once (depth-filtered)
-  # Rule string preserves order: "feat dir bin > feat dir bin > ..."
-  LS_rule <- LS[depth < max_depth]  # keep <= (max_depth-1) depth indices => <= max_depth splits
-  if (!nrow(LS_rule)) stop("[harvest] No steps under the requested max_depth.")
-  LS_rule[, cond_lbl := paste0(feature, " ", direction, " ", format(thresh_bin, trim = TRUE))]
-  PATHS <- LS_rule[, .(
-    rule_len = .N,
-    rule_str = paste(cond_lbl, collapse = " > "),
-    depth_min = min(depth),
-    depth_max = max(depth)
-  ), by = .(Tree, leaf_id)]
-  data.table::setkey(PATHS, Tree, leaf_id)
+  # Precompute nb per tree & rule_len by (Tree,leaf)
+  nb_vec <- precompute_nb_vec(leaves)
   
-  # Collect stats per path
-  out_list <- vector("list", length(use_tt))
-  oi <- 1L
-  
-  for (tt in use_tt) {
-    tr <- tt - 1L  # 0-based tree index
-    # SNP-to-leaf column
-    li_all <- as.integer(leaves[, tt])
-    
-    # counts for ALL and EXTREME on this tree
-    tab_all <- table(li_all)
-    li_ext  <- as.integer(leaves[is_extreme, tt])
-    tab_ext <- table(li_ext)
-    
-    # Assemble counts into a DT keyed by (Tree, leaf_id)
-    leaf_ids <- as.integer(names(tab_all))
-    cnt_all  <- as.integer(unname(tab_all))
-    cnt_ext  <- integer(length(leaf_ids))
-    if (length(tab_ext)) {
-      match_idx <- match(leaf_ids, as.integer(names(tab_ext)))
-      hit <- !is.na(match_idx)
-      cnt_ext[hit] <- as.integer(unname(tab_ext)[match_idx[hit]])
-    }
-    DTc <- data.table::data.table(Tree = tr,
-                                  leaf_id = leaf_ids,
-                                  n_all = cnt_all,
-                                  n_extreme = cnt_ext)
-    DTc[, n_bg := pmax(0L, n_all - n_extreme)]
-    
-    # Join to the rule strings for this tree
-    DT <- PATHS[DTc, on = .(Tree, leaf_id), nomatch = 0L]
-    if (!nrow(DT)) { oi <- oi + 1L; next }
-    
-    # Support filter
-    DT <- DT[(n_extreme + n_bg) >= as.integer(min_support)]
-    if (!nrow(DT)) { oi <- oi + 1L; next }
-    
-    # Stats per path
-    base_rate <- N_extreme / (N_extreme + N_bg)  # scalar
-    
-    support <- DT$n_extreme + DT$n_bg
-    # one-sided hypergeom tail: P[X >= n_extreme]
-    pval <- phyper(q = DT$n_extreme - 1L, m = N_extreme, n = N_bg, k = support, lower.tail = FALSE)
-    
-    # Haldane–Anscombe corrected OR for stability
-    a <- DT$n_extreme
-    b <- N_extreme - DT$n_extreme
-    c <- DT$n_bg
-    d <- N_bg - DT$n_bg
-    or_ha <- ((a + 0.5) * (d + 0.5)) / ((b + 0.5) * (c + 0.5))
-    
-    # SAFE sequential assignments (no self-references in same :=)
-    DT[, precision := n_extreme / pmax(1e-12, n_extreme + n_bg)]
-    DT[, lift      := if (base_rate > 0) precision / base_rate else rep(NA_real_, .N)]
-    DT[, `:=`(odds_ratio = or_ha, pval = pval)]
-    
-    out_list[[oi]] <- DT[, .(Tree, leaf_id, rule_len, rule_str,
-                             n_extreme, n_bg, precision, lift, odds_ratio,
-                             pval, depth_min, depth_max)]
-    oi <- oi + 1L
-    
-    if (((oi-1L) %% progress_every) == 0L || (tt == tail(use_tt, 1L))) {
-      message(sprintf("[harvest] processed tree %d / %d (%.1f%%)",
-                      tt, Tm, 100*(oi-1L)/length(use_tt)))
-      gc(FALSE)
-    }
+  rule_len_by_leaf <- vector("list", Tm)
+  split_paths <- split(PATHS_full[, .(leaf_id, rule_len)], PATHS_full$Tree)
+  for (tr_chr in names(split_paths)) {
+    tr <- as.integer(tr_chr)
+    dt <- split_paths[[tr_chr]]
+    if (!nrow(dt)) next
+    nb <- max(dt$leaf_id, na.rm = TRUE) + 1L
+    rlen <- rep.int(NA_integer_, nb)
+    rlen[dt$leaf_id + 1L] <- as.integer(dt$rule_len)
+    rule_len_by_leaf[[tr + 1L]] <- rlen
   }
+  rm(PATHS_full)
   
-  rules <- data.table::rbindlist(out_list, use.names = TRUE, fill = TRUE)
-  if (!nrow(rules)) {
-    warning("[harvest] No rules after filtering; try lowering min_support or increasing max_depth.")
-    return(data.table::data.table())
-  }
+  pool_beat <- if (!is.null(progress_every) && progress_every > 0L) progress_every * 5L else NULL
+  y_num <- if (!is.null(yvar_train)) as.numeric(yvar_train) else NULL
   
-  # Optional: pool identical rule strings across trees (sum across trees), then recount unique SNPs
   if (isTRUE(pool_identical)) {
-    # 1) Gather the set of (Tree, leaf_id) per rule_str
-    RL <- rules[, .(Tree, leaf_id, rule_str)]
-    # 2) For each rule_str, compute the union of rows across all (Tree,leaf_id) that realize it
-    pooled_list <- vector("list", length = uniqueN(RL$rule_str))
-    ui <- 1L
-    for (rs in unique(RL$rule_str)) {
-      pairs <- RL[rule_str == rs, .(Tree, leaf_id)]
-      if (!nrow(pairs)) next
+    # ---- POOL: produce R ------------------------------------------------------
+    rules_min_list <- vector("list", ceiling(length(use_tt) / trees_per_batch)); rmi <- 1L
+    pairs_list     <- vector("list", ceiling(length(use_tt) / trees_per_batch)); pli <- 1L
+    
+    for (batch_start in seq(1L, length(use_tt), by = trees_per_batch)) {
+      batch_end <- min(batch_start + trees_per_batch - 1L, length(use_tt))
+      batch_rules_min <- vector("list", batch_end - batch_start + 1L); bi <- 1L
+      batch_pairs     <- vector("list", batch_end - batch_start + 1L); bj <- 1L
       
-      # Collect row indices that fall into any of these leaves across their trees
-      rows_hit <- integer(0)
-      for (ii in seq_len(nrow(pairs))) {
-        tr0 <- pairs$Tree[ii]                  # 0-based tree id
-        tt  <- tr0 + 1L                        # column in 'leaves'
-        lid <- pairs$leaf_id[ii]
-        rows_hit <- c(rows_hit, which(as.integer(leaves[, tt]) == lid))
+      for (tt in use_tt[batch_start:batch_end]) {
+        tr <- tt - 1L
+        lt <- as.integer(leaves[, tt])
+        nb <- nb_vec[tt]; if (!is.finite(nb) || nb <= 0L) { bi <- bi + 1L; bj <- bj + 1L; next }
+        
+        count_extr_vec <- count_by_leaf(lt, extr_idx, nb)
+        count_bg_vec   <- count_by_leaf(lt, bg_idx,   nb)
+        
+        leaf_ids <- which((count_extr_vec + count_bg_vec) > 0L) - 1L
+        if (!length(leaf_ids)) { bi <- bi + 1L; bj <- bj + 1L; next }
+        
+        rlen <- rule_len_by_leaf[[tt]]
+        if (is.null(rlen)) { bi <- bi + 1L; bj <- bj + 1L; next }
+        
+        DT0 <- data.table::data.table(
+          Tree      = tr,
+          leaf_id   = leaf_ids,
+          rule_len  = rlen[leaf_ids + 1L],
+          n_extreme = count_extr_vec[leaf_ids + 1L],
+          n_bg      = count_bg_vec [leaf_ids + 1L]
+        )
+        
+        DT0 <- DT0[(n_extreme + n_bg) >= as.integer(min_support)]
+        if (!nrow(DT0)) { bi <- bi + 1L; bj <- bj + 1L; next }
+        
+        J <- PATHS[DT0, on = .(Tree, leaf_id), nomatch = 0L]
+        if (!nrow(J)) { bi <- bi + 1L; bj <- bj + 1L; next }
+        
+        batch_rules_min[[bi]] <- J[, .(rule_str, rule_len)]
+        batch_pairs    [[bj]] <- J[, .(Tree, leaf_id, rule_str)]
+        bi <- bi + 1L; bj <- bj + 1L
       }
-      if (length(rows_hit)) rows_hit <- unique(rows_hit)
       
-      # Unique support counts
-      n_all <- length(rows_hit)
-      if (n_all == 0L) {
-        n_ext <- 0L; n_bg <- 0L
-      } else {
-        ext_flags <- is_extreme[rows_hit]
-        n_ext <- sum(ext_flags)
-        n_bg  <- n_all - n_ext
+      rules_min_list[[rmi]] <- data.table::rbindlist(batch_rules_min, use.names = TRUE, fill = TRUE); rmi <- rmi + 1L
+      pairs_list    [[pli]] <- data.table::rbindlist(batch_pairs,     use.names = TRUE, fill = TRUE); pli <- pli + 1L
+      
+      if (!is.null(progress_every) && progress_every > 0L &&
+          ((batch_end %% progress_every) == 0L || batch_end == length(use_tt))) {
+        message(sprintf("[harvest] processed tree %d / %d (%.1f%%)",
+                        use_tt[batch_end], Tm, 100*batch_end/length(use_tt)))
       }
-      
-      pooled_list[[ui]] <- data.table::data.table(
-        rule_str  = rs,
-        rule_len  = unique(rules[rule_str == rs, rule_len])[1L],
-        n_extreme = as.integer(n_ext),
-        n_bg      = as.integer(n_bg),
-        depth_min = min(rules[rule_str == rs, depth_min], na.rm = TRUE),
-        depth_max = max(rules[rule_str == rs, depth_max], na.rm = TRUE)
-      )
-      ui <- ui + 1L
     }
-    rules <- data.table::rbindlist(pooled_list, use.names = TRUE, fill = TRUE)
-    if (!nrow(rules)) {
-      warning("[harvest] No rules after pooling recount; try lowering min_support or increasing max_depth.")
+    
+    rules_min <- data.table::rbindlist(rules_min_list, use.names = TRUE, fill = TRUE)
+    if (!nrow(rules_min)) {
+      warning("[harvest] No rules after filtering; try lowering min_support or increasing max_depth.")
+      return(data.table::data.table())
+    }
+    rule_len_map <- rules_min[, .(rule_len = max(rule_len, na.rm = TRUE)), by = rule_str]
+    data.table::setkey(rule_len_map, rule_str)
+    
+    pairs_all <- data.table::rbindlist(pairs_list, use.names = TRUE, fill = TRUE)
+    if (!nrow(pairs_all)) {
+      warning("[harvest] No rule pairs to pool after filtering.")
       return(data.table::data.table())
     }
     
-    # Recompute stats SAFELY on unique counts
-    base_rate <- N_extreme / (N_extreme + N_bg)
-    support   <- rules$n_extreme + rules$n_bg
-    
-    # Guard against any lingering invalids
-    ok <- is.finite(support) & support >= 0 &
-      is.finite(rules$n_extreme) & rules$n_extreme >= 0 &
-      is.finite(N_extreme) & is.finite(N_bg) & N_extreme >= 0 & N_bg >= 0 &
-      support <= (N_extreme + N_bg) &
-      rules$n_extreme <= support
-    
-    pval <- rep(NA_real_, nrow(rules))
-    if (any(ok)) {
-      pval[ok] <- phyper(q = rules$n_extreme[ok] - 1L,
-                         m = N_extreme, n = N_bg, k = support[ok],
-                         lower.tail = FALSE)
+    # Row-index caches for pooling
+    leaf_rows_index_ext <- vector("list", length = Tm)
+    leaf_rows_index_bg  <- vector("list", length = Tm)
+    for (tt in use_tt) {
+      lt <- as.integer(leaves[, tt])
+      leaf_rows_index_ext[[tt]] <- split(extr_idx, lt[extr_idx], drop = TRUE)
+      leaf_rows_index_bg [[tt]] <- split(bg_idx,   lt[bg_idx],   drop = TRUE)
     }
     
-    # Haldane–Anscombe OR and precision/lift on the unique counts
-    a <- rules$n_extreme
-    b <- N_extreme - rules$n_extreme
-    c <- rules$n_bg
-    d <- N_bg - rules$n_bg
-    or_ha <- ((a + 0.5) * (d + 0.5)) / ((b + 0.5) * (c + 0.5))
+    uniq_rules <- sort(unique(pairs_all$rule_str))
+    pooled <- vector("list", length(uniq_rules))
     
-    rules[, precision := n_extreme / pmax(1e-12, n_extreme + n_bg)]
-    rules[, lift      := if (base_rate > 0) precision / base_rate else NA_real_]
-    rules[, `:=`(odds_ratio = or_ha, pval = pval)]
-  }
-  
-  # FDR and ordering 
-  rules[, qval := p.adjust(pval, method = "BH")]
-  data.table::setorderv(
-    rules,
-    cols  = c("qval", "lift", "odds_ratio", "precision"),
-    order = c( 1L,   -1L,     -1L,          -1L)
-  )
-  rules[]
-}
-
-
-# Compute tree-level separation between extreme and background leaf distributions.
-# Returns one row per tree (0-based Tree ids).
-compute_tree_separation <- function(leaves,
-                                    extreme_rows,
-                                    smooth = 1e-9,
-                                    compute_js = FALSE) {
-  stopifnot(is.matrix(leaves) || inherits(leaves, "dgCMatrix"))
-  n  <- nrow(leaves)
-  Tm <- ncol(leaves)
-  extreme_rows <- as.integer(unique(extreme_rows))
-  extreme_rows <- extreme_rows[extreme_rows >= 1L & extreme_rows <= n]
-  if (!length(extreme_rows)) stop("[tree-sep] extreme_rows is empty or out of range.")
-  
-  is_ext <- logical(n); is_ext[extreme_rows] <- TRUE
-  N_ext  <- sum(is_ext); N_bg <- n - N_ext
-  if (N_ext <= 0L || N_bg <= 0L) stop("[tree-sep] Need both extreme and background SNPs.")
-  
-  # helpers
-  kl_div <- function(p, q) {
-    # both p and q strictly positive and sum to 1
-    sum(p * (log(p) - log(q)))
-  }
-  js_div <- function(p, q) {
-    m <- 0.5 * (p + q)
-    0.5 * kl_div(p, m) + 0.5 * kl_div(q, m)
-  }
-  norm1 <- function(x) { s <- sum(x); if (s == 0) x else (x / s) }
-  
-  out <- data.table::data.table(
-    Tree       = integer(Tm),
-    KL_ext_bg  = numeric(Tm),
-    KL_bg_ext  = numeric(Tm),
-    JS         = if (isTRUE(compute_js)) numeric(Tm) else NULL,
-    n_leaves   = integer(Tm)
-  )
-  
-  for (tt in seq_len(Tm)) {
-    tr <- tt - 1L
-    lt_all <- as.integer(leaves[, tt])
-    # counts
-    tab_all <- table(lt_all)
-    tab_ext <- table(lt_all[is_ext])
-    # align support
-    leaf_ids <- sort(unique(as.integer(c(names(tab_all), names(tab_ext)))))
-    idx_all <- match(leaf_ids, as.integer(names(tab_all))); cnt_all <- integer(length(leaf_ids)); if (length(idx_all)) cnt_all[!is.na(idx_all)] <- as.integer(tab_all[idx_all[!is.na(idx_all)]])
-    idx_ext <- match(leaf_ids, as.integer(names(tab_ext))); cnt_ext <- integer(length(leaf_ids)); if (length(idx_ext)) cnt_ext[!is.na(idx_ext)] <- as.integer(tab_ext[idx_ext[!is.na(idx_ext)]])
-    cnt_bg  <- pmax(0L, cnt_all - cnt_ext)
+    last_beat <- 0L
+    for (i in seq_along(uniq_rules)) {
+      rs <- uniq_rules[i]
+      pairs <- unique(pairs_all[rule_str == rs, .(Tree, leaf_id)])
+      if (!nrow(pairs)) next
+      
+      rows_ext <- integer(0); rows_bg <- integer(0)
+      for (j in seq_len(nrow(pairs))) {
+        tt  <- pairs$Tree[j] + 1L
+        lid <- as.character(pairs$leaf_id[j])
+        re  <- leaf_rows_index_ext[[tt]][[lid]]
+        rb  <- leaf_rows_index_bg [[tt]][[lid]]
+        if (!is.null(re)) rows_ext <- c(rows_ext, re)
+        if (!is.null(rb)) rows_bg  <- c(rows_bg,  rb)
+      }
+      rows_ext <- unique(rows_ext)
+      rows_bg  <- unique(rows_bg)
+      
+      n_e <- length(rows_ext)
+      n_b <- length(rows_bg)
+      support <- n_e + n_b
+      
+      precision <- n_e / pmax(1e-12, support)
+      recall    <- if (N_extr > 0) n_e / N_extr else NA_real_
+      lift      <- if (base_rate  > 0) precision / base_rate else NA_real_
+      pval      <- stats::phyper(q = max(0L, n_e - 1L), m = N_extr, n = N_bg, k = support, lower.tail = FALSE)
+      or_ha     <- ((n_e + 0.5) * (N_bg - n_b + 0.5)) / ((N_extr - n_e + 0.5) * (n_b + 0.5))
+      
+      med_e <- if (!is.null(y_num) && n_e) median(y_num[rows_ext], na.rm = TRUE) else NA_real_
+      med_b <- if (!is.null(y_num) && n_b) median(y_num[rows_bg ], na.rm = TRUE) else NA_real_
+      med_o <- if (!is.null(y_num) && support > 0L) median(c(y_num[rows_ext], y_num[rows_bg]), na.rm = TRUE) else NA_real_
+      
+      rl <- rule_len_map[rs, rule_len]
+      
+      pooled[[i]] <- data.table::data.table(
+        rule_str      = rs,
+        rule_len      = as.integer(rl),
+        n_extreme     = n_e,
+        n_bg          = n_b,
+        support       = support,
+        precision     = precision,
+        recall        = recall,
+        lift          = lift,
+        odds_ratio    = or_ha,
+        pval          = pval,
+        med_y_extreme = med_e,
+        med_y_bg      = med_b,
+        med_y_overall = med_o
+      )
+      
+      if (!is.null(pool_beat) && (i - last_beat) >= pool_beat) {
+        message(sprintf("[harvest/pool] %d of %d rule strings", i, length(uniq_rules)))
+        last_beat <- i
+      }
+    }
     
-    # probabilities with tiny smoothing to avoid zeros
-    p_ext <- norm1(cnt_ext + smooth)
-    p_bg  <- norm1(cnt_bg  + smooth)
+    R <- data.table::rbindlist(pooled, use.names = TRUE, fill = TRUE)
     
-    kl_e_b <- kl_div(p_ext, p_bg)
-    kl_b_e <- kl_div(p_bg,  p_ext)
-    
-    out[tt, `:=`(
-      Tree      = tr,
-      KL_ext_bg = kl_e_b,
-      KL_bg_ext = kl_b_e,
-      n_leaves  = length(leaf_ids)
-    )]
-    if (isTRUE(compute_js)) out$JS[tt] <- js_div(p_ext, p_bg)
-  }
-  out[]
-}
-
-# Select the top trees by a chosen score column (default = KL_ext_bg).
-# You can control how many via top_frac / min_trees / max_trees or a quantile cutoff.
-select_trees_by_separation <- function(tree_scores,
-                                       score_col   = c("KL_ext_bg", "JS"),
-                                       top_frac    = 0.20,     # keep top 20% by default
-                                       min_trees   = 50L,      # but at least 50 trees
-                                       max_trees   = NULL,     # or cap if you want
-                                       q_cutoff    = NULL      # alternatively, keep >= quantile
-) {
-  stopifnot(is.data.frame(tree_scores))
-  score_col <- match.arg(score_col)
-  DT <- data.table::as.data.table(tree_scores)
-  if (!(score_col %in% names(DT))) stop(sprintf("[select-trees] score_col '%s' not found.", score_col))
-  data.table::setorder(DT, -get(score_col))
-  
-  Tm <- nrow(DT)
-  if (!is.null(q_cutoff)) {
-    thr <- stats::quantile(DT[[score_col]], probs = q_cutoff, na.rm = TRUE)
-    sel <- DT[get(score_col) >= thr, Tree]
   } else {
-    k <- max(min_trees, ceiling(top_frac * Tm))
-    if (!is.null(max_trees)) k <- min(k, as.integer(max_trees))
-    sel <- DT$Tree[seq_len(min(k, Tm))]
-  }
-  sort(unique(as.integer(sel)))
-}
-
-
-run_snp_level_pipeline <- function(model, # trained XGBoost model
-                                   X,     # training feature matrix
-                                   f_vec, # training lable vector (F)
-                                   save_prefix = "leafsim",
-                                   snpcodes    = NULL, # optional; dataframe with columns "snpcode" and "row"; used to annotate results
-                                   lower_tail  = FALSE,
-                                   extreme_k   = 1,
-                                   target_bins = 8L,
-                                   min_bin_size = 50L,
-                                   winsor_prob  = 0.001,
-                                   chunk_size  = 200L,
-                                   feat_top_k  = 2L,
-                                   progress_every = 500L,
-                                   save_checkpoint = TRUE
-) {
-  # --- Path similarity metrics per‑SNP; keeps leaves/tdt/helpers) ---
-  res <- compute_snp_similarity(
-    model = model, 
-    X = train.dat, 
-    f_vec = f.train,
-    lower_tail     = lower_tail,
-    extreme_k      = extreme_k,
-    progress_every = progress_every,
-    show_progress  = TRUE
-  )
-  
-  # --- Precompute per‑leaf steps ---
-  .info("Precomputing per‑leaf steps...")
-  res$leaf_steps <- build_leaf_steps(
-    res$leaves,
-    res$tdt, 
-    res$helpers,
-    binning         = "adaptive",
-    target_bins     = target_bins,
-    min_per_bin     = min_bin_size,
-    winsor_prob     = winsor_prob,
-    method          = "fd",      # or "quantile"
-    trees_per_batch = chunk_size
-  )
-  
-  # --- Feature concentration (per‑leaf → per‑SNP), from leaf_steps) ---
-  .info("Computing feature concentration (top-%d) per SNP...", feat_top_k)
-  res$perleaf <- per_leaf_topk_share(
-    res$leaf_steps, 
-    top_k = feat_top_k,
-    progress_every = progress_every
-  )
-  
-  fc_per_snp <- feature_concentration_per_snp(
-    res$leaves, 
-    res$perleaf, 
-    chunk_rows = chunk_size
-  )
-  
-  DTs <- list(res$summaries, fc_per_snp, train.codes)
-  summaries <- Reduce(function(x, y) merge(x, y, by = "row", all.x = TRUE, sort = FALSE), DTs)
-  
-  res$summaries <- summaries
-  
-  # --- Save per‑SNP metrics to disk (small) ---
-  out_metrics <- paste0(save_prefix, "_perSNP_metrics_", tail_dir, ".csv")
-  fwrite(res$summaries, out_metrics)
-  .info("Wrote per‑SNP metrics: %s (rows=%d)", out_metrics, nrow(summaries))
-  
-  # --- Cache checkpoint  ---
-  checkpoint_file <- NA_character_
-  if (isTRUE(save_checkpoint)) {
-    chk_file <- timestamped_file(paste0(save_prefix, "_persnp_checkpoint_", tail_dir), ".rds")
-    .info("Saving checkpoint: %s", chk_file)
-    saveRDS(list(
-      summaries = res$summaries,
-      leaves    = res$leaves,
-      tdt       = res$tdt,
-      helpers   = res$helpers,
-      leaf_steps= res$leaf_steps,
-      extreme   = res$extreme,
-      tail_dir  = res$tail_dir), file = chk_file)
-    .info("Checkpoint saved: %s", chk_file)
+    # ---- UNPOOLED: produce rules, then R <- rules -----------------------------
+    out_list <- vector("list", ceiling(length(use_tt) / trees_per_batch)); oi <- 1L
+    
+    for (batch_start in seq(1L, length(use_tt), by = trees_per_batch)) {
+      batch_end <- min(batch_start + trees_per_batch - 1L, length(use_tt))
+      batch_rules <- vector("list", batch_end - batch_start + 1L); bi <- 1L
+      
+      for (tt in use_tt[batch_start:batch_end]) {
+        tr <- tt - 1L
+        lt <- as.integer(leaves[, tt])
+        nb <- nb_vec[tt]; if (!is.finite(nb) || nb <= 0L) { bi <- bi + 1L; next }
+        
+        count_extr_vec <- count_by_leaf(lt, extr_idx, nb)
+        count_bg_vec   <- count_by_leaf(lt, bg_idx,   nb)
+        
+        leaf_ids <- which((count_extr_vec + count_bg_vec) > 0L) - 1L
+        if (!length(leaf_ids)) { bi <- bi + 1L; next }
+        
+        rlen <- rule_len_by_leaf[[tt]]
+        if (is.null(rlen)) { bi <- bi + 1L; next }
+        
+        DT0 <- data.table::data.table(
+          Tree      = tr,
+          leaf_id   = leaf_ids,
+          rule_len  = rlen[leaf_ids + 1L],
+          n_extreme = count_extr_vec[leaf_ids + 1L],
+          n_bg      = count_bg_vec [leaf_ids + 1L]
+        )
+        
+        DT0 <- DT0[(n_extreme + n_bg) >= as.integer(min_support)]
+        if (!nrow(DT0)) { bi <- bi + 1L; next }
+        
+        J <- PATHS[DT0, on = .(Tree, leaf_id), nomatch = 0L]
+        if (!nrow(J)) { bi <- bi + 1L; next }
+        
+        support <- J$n_extreme + J$n_bg
+        pval    <- stats::phyper(q = pmax(0L, J$n_extreme - 1L), m = N_extr, n = N_bg, k = support, lower.tail = FALSE)
+        a <- J$n_extreme; b <- N_extr - J$n_extreme; c <- J$n_bg; d <- N_bg - J$n_bg
+        or_ha <- ((a + 0.5) * (d + 0.5)) / ((b + 0.5) * (c + 0.5))
+        
+        DT <- J[, .(
+          rule_str,
+          rule_len,
+          n_extreme,
+          n_bg,
+          support,
+          precision  = n_extreme / pmax(1e-12, n_extreme + n_bg),
+          recall     = if (N_extr > 0) n_extreme / N_extr else NA_real_,
+          lift       = if (base_rate  > 0) (n_extreme / pmax(1e-12, n_extreme + n_bg)) / base_rate else NA_real_,
+          odds_ratio = or_ha,
+          pval       = pval
+        )]
+        
+        batch_rules[[bi]] <- DT; bi <- bi + 1L
+      }
+      
+      out_list[[oi]] <- data.table::rbindlist(batch_rules, use.names = TRUE, fill = TRUE); oi <- oi + 1L
+      if (!is.null(progress_every) && progress_every > 0L &&
+          ((batch_end %% progress_every) == 0L || batch_end == length(use_tt))) {
+        message(sprintf("[harvest] processed tree %d / %d (%.1f%%)",
+                        use_tt[batch_end], Tm, 100*batch_end/length(use_tt)))
+      }
+    }
+    
+    rules <- data.table::rbindlist(out_list, use.names = TRUE, fill = TRUE)
+    if (!nrow(rules)) {
+      warning("[harvest] No rules after filtering; try lowering min_support or increasing max_depth.")
+      return(data.table::data.table())
+    }
+    R <- rules
   }
   
-  # --- Return ---
-  list(
-    summaries     = res$summaries,        # per‑SNP table (incl. LCP + feature_conc)
-    leaves        = res$leaves,           # n x Tm integer matrix
-    tdt           = res$tdt,              # compact model tree table
-    helpers       = res$helpers,          # cached structure helpers
-    leaf_steps    = res$leaf_steps,       # (Tree, leaf_id) → steps (feature,dir,thresh_bin,depth)
-    perleaf       = res$perleaf,          # per‑leaf top‑k share (used for FC)
-    extreme_idx   = res$extreme_idx,
-    tail_dir      = res$tail_dir
-  )
+  # q-values & ordering on R (always)
+  R[, qval := p.adjust(pval, method = "BH")]
+  data.table::setorderv(R,
+                        cols  = c("qval", "lift", "odds_ratio", "precision", "recall"),
+                        order = c( 1L,   -1L,     -1L,          -1L,         -1L))
+  R[]
 }
-
