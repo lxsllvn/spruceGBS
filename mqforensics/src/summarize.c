@@ -29,7 +29,11 @@ void print_agg_header(FILE *fo, bool with_hist_metrics){
         "clipfrac_mean\tclipfrac_sd\t"
         "frac_capped\tmean_delta\tsd_delta\t"
         "flank_cov_mean\tflank_cov_sd\t"
-        "flank_cf_mean\tflank_cf_sd");
+        "flank_cf_mean\tflank_cf_sd\t"
+        "entropy_pooled\talph_eff_pooled\tentropy_fwd\talph_eff_fwd\t"
+        "entropy_rev\talph_eff_rev\t"
+        "gc_frac_pooled\tgc_frac_fwd\tgc_frac_rev\t"
+        "strand_bias_z");
     if (with_hist_metrics){
         fprintf(fo, "\tks_mq_eff\tw1_mq_eff\tjs_mq_eff\tmq_median_hist\teffmq_median_hist\tclipfrac_median_hist");
     }
@@ -113,6 +117,23 @@ void finalize_and_print_agg(FILE *fo, Agg *a, bool with_hist_metrics){
     if (flank_cf_varp < 0) flank_cf_varp = 0;
     double flank_cf_sd    = (a->n_flank_cf > 0) ? sqrt(flank_cf_varp) : NAN;
 
+    long long depth_fwd = a->nA_fwd + a->nC_fwd + a->nG_fwd + a->nT_fwd + a->nN_fwd;
+    long long depth_rev = a->nA_rev + a->nC_rev + a->nG_rev + a->nT_rev + a->nN_rev;
+    long long nA_tot = a->nA_fwd + a->nA_rev;
+    long long nC_tot = a->nC_fwd + a->nC_rev;
+    long long nG_tot = a->nG_fwd + a->nG_rev;
+    long long nT_tot = a->nT_fwd + a->nT_rev;
+    double ent_pooled = entropy_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
+    double ent_fwd    = entropy_from_counts(a->nA_fwd, a->nC_fwd, a->nG_fwd, a->nT_fwd);
+    double ent_rev    = entropy_from_counts(a->nA_rev, a->nC_rev, a->nG_rev, a->nT_rev);
+    double alph_p     = isnan(ent_pooled) ? NAN : pow(2.0, ent_pooled);
+    double alph_f     = isnan(ent_fwd)    ? NAN : pow(2.0, ent_fwd);
+    double alph_r     = isnan(ent_rev)    ? NAN : pow(2.0, ent_rev);
+    double gc_pooled  = gcfrac_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
+    double gc_fwd     = gcfrac_from_counts(a->nA_fwd, a->nC_fwd, a->nG_fwd, a->nT_fwd);
+    double gc_rev     = gcfrac_from_counts(a->nA_rev, a->nC_rev, a->nG_rev, a->nT_rev);
+    double sb_z       = strand_bias_z(depth_fwd, depth_rev);
+
     /* --- print exactly one row --- */
     fprintf(fo,
         "%s\t%d\t%lld\t"
@@ -123,7 +144,10 @@ void finalize_and_print_agg(FILE *fo, Agg *a, bool with_hist_metrics){
         "%.6g\t%.6g\t"                      /* clipfrac mean/sd             */
         "%.6g\t%.6g\t%.6g\t"                /* frac_capped, mean_delta, sd_delta */
         "%.6g\t%.6g\t"                      /* flank_cov mean/sd            */
-        "%.6g\t%.6g",                       /* flank_cf mean/sd             */
+        "%.6g\t%.6g\t"                      /* flank_cf mean/sd             */
+        "%.6g\t%.6g\t%.6g\t%.6g\t%.6g\t%.6g\t"  /* entropy/alphabet sizes */
+        "%.6g\t%.6g\t%.6g\t"                  /* GC fractions */
+        "%.6g",                               /* strand bias z */
         a->chrom, a->pos, a->depth,
         mismatch_rate, ins_rate, del_rate, clip_rate,
         mq_mean, mq_sd, cap_mean, cap_sd,
@@ -132,7 +156,10 @@ void finalize_and_print_agg(FILE *fo, Agg *a, bool with_hist_metrics){
         cf_mean, cf_sd,
         frac_capped, mean_delta, sd_delta,
         flank_cov_mean, flank_cov_sd,
-        flank_cf_mean,  flank_cf_sd
+        flank_cf_mean,  flank_cf_sd,
+        ent_pooled, alph_p, ent_fwd, alph_f, ent_rev, alph_r,
+        gc_pooled, gc_fwd, gc_rev,
+        sb_z
     );
 
     if (with_hist_metrics){
@@ -267,6 +294,11 @@ int summarize_main(int argc, char **argv){
                 cur.sumsq_flank_cf += ss;
             } else goto parse_error;
         }
+
+        // per-strand base counts (10 numbers always present)
+        long long *cnt_ptr[10] = { &cur.nA_fwd, &cur.nC_fwd, &cur.nG_fwd, &cur.nT_fwd, &cur.nN_fwd,
+                                   &cur.nA_rev, &cur.nC_rev, &cur.nG_rev, &cur.nT_rev, &cur.nN_rev };
+        for (int cc=0; cc<10; cc++){ tok = strsep(&p,"\t"); if(!tok) goto parse_error; *(cnt_ptr[cc]) += atoll(tok); }
 
         // optional hists
         if (with_hist){

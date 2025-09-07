@@ -141,6 +141,8 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
     const uint32_t *cig=bam_get_cigar(b); int nc=b->core.n_cigar;
     if (b->core.tid != iv_tid) return 0;
     int64_t ref=b->core.pos; int rpos=0; long long aligned_bp=0;
+    uint8_t *seq = bam_get_seq(b);
+    bool rev = (b->core.flag & BAM_FREVERSE) != 0;
     for(int k=0;k<nc;k++){
         int op=bam_cigar_op(cig[k]), ln=bam_cigar_oplen(cig[k]);
         if (op==BAM_CMATCH||op==BAM_CEQUAL||op==BAM_CDIFF){
@@ -155,6 +157,15 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
                     vpush(&sites[idx].subq, rq->SubQ);
                     vpush(&sites[idx].clipq, rq->ClipQ);
                     sites[idx].clip_bases_sum += rq->clipped_bases;
+
+                    int nt = bam_seqi(seq, rpos+i) & 0xF;
+                    switch(nt){
+                        case 1: if (rev) sites[idx].nA_rev++; else sites[idx].nA_fwd++; break;
+                        case 2: if (rev) sites[idx].nC_rev++; else sites[idx].nC_fwd++; break;
+                        case 4: if (rev) sites[idx].nG_rev++; else sites[idx].nG_fwd++; break;
+                        case 8: if (rev) sites[idx].nT_rev++; else sites[idx].nT_fwd++; break;
+                        default: if (rev) sites[idx].nN_rev++; else sites[idx].nN_fwd++; break;
+                    }
 
                     // histograms
                     int mqbin = rq->mapq_raw/10; if(mqbin<0) mqbin=0; if(mqbin>6) mqbin=6; sites[idx].hist_mq[mqbin]++;
