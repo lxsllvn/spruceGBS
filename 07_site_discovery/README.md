@@ -21,16 +21,21 @@ Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpf
 * **`split_reference.sh`**: divides reference genome into subsets, creating indexed FASTA files and corresponding ANGSD region/site files
 * **`site_discovery.sh`**: runs ANGSD on each reference subset and finds sites passing minimal quality filters
 * **`prepare_angsd_ref.sh`**: concatenates filtered position files and prepares final region, site, and indexed fasta files
+* **`do_domain_discovery.sh`**: driver to launch `site_discovery.sh` and `prepare_angsd_ref.sh` jobs simultanously 
 * **`angsd_likelihoods.sh`**: runs ANGSD on the prepared reference and outputs genotype likelihoods and site-level summary statistics
-* **`summarize_site_stats.py`**: does stuff
-* **`summarize_site_stats.sh`**: does stuff
+* **`summarize_site_stats.py`**: collects SNP diagnostic metrics from ANGSD outputs and site-level depth summaries
+* **`summarize_site_stats.sh`**: helper for submitting `summarize_site_stats.py` jobs
+* **`reheader_genotype_matrix.sh`**: helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to add informative headers to ANGSD `*.counts.gz` and `*.beagle.gz` files
+* **`read_counts_by_genotype.sh`**: helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to split `*.counts.gz` into homRef/het/ homAlt using by most likely genotype from `*.beagle.gz`
+* **`subset_genotype_matrix.sh`**:  helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to select samples and/or sites from `*.counts.gz` and `*.beagle.gz`
+* **`do_xgboost.R`**: finalizes features, prepares test/train sets, runs Bayesian parameter optimization, and trains XGBoost model
+* **`do_xgboost.sh`**: helper script to submit `do_xgboost.R` 
+* **`GBDT_path_analysis.R`**: functions for gradient boosted decision tree (GBDT) ensemble path analyses
+* **`discovery_and_filtering.R`**: does stuff
 * **`codeconvert`**: does stuff
 * **`sample_call_rates.sh`**: does stuff
-* **`reheader_genotype_matrix.sh`**: does stuff
-* **`subset_genotype_matrix.sh`**: does stuff
 * **`library_call_thresh.R`**: does stuff
 * **`batch_effects.sh`**: does stuff
-* **`discovery_and_filtering.R`**: does stuff
 
 ---
 
@@ -39,16 +44,6 @@ Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpf
 In [Step 2: Reduced reference genome preparation](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref), we identified scaffolds with reads and, from these, designated target regions that fall outside of annotated repeats. These target regions comprise ~519 Mb across 100,000 scaffolds, a substantial reduction from the 12.4 Gb and 10,253,694 scaffolds of the original assembly, but still far too large for ANGSD to manage. 
 
 Here, we repeat the methods used to create an ANGSD-friendly reference for the [the parameter sweep](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref), this time using all target regions and all samples that passed [initial quality control](https://github.com/lxsllvn/spruceGBS/tree/main/03_initial_qc). Our goal is simply to remove sites that fail some minimal call rate and quality filters, with some leeway for further parameter optimization. 
-
-Creating ANGSD-ready references is a three-step process:
-
-1. `split_reference.sh`: Divides `picea_newref_target_regions.bed` into 23 subsets, extracts and indexes their FASTA records, and prepares their corresponding ANGSD site and region files. There’s nothing special about 23; based on trial runs before running out of memory, ANGSD could analyze ~5,000 scaffolds (+/- 15%) and 300 samples using ~36 Gb of memory, which is convenient for our cluster.
-
-2. `site_discovery.sh`: Runs ANGSD using the quality filters identified in the parameter sweep (`-minQ 20 -minMapQ 50 -C 100 -baq 0`) and finds sites with <60% missing data. The missing data cutoff is somewhat arbitrary; the goal is simply to make the reference small enough for analysis while leaving some leeway to optimize sample vs. site-level missing data.
-
-3. `prepare_angsd_ref.sh`: Merges the passing sites and produces a single indexed fasta and ANGSD site and region file.
-
-This process is applied to each domain separately to enable detection of private loci that may occur due to recognition site mutations. 
 
 For the southern and Siberian domains, all samples (~300 each) were analyzed simultaneously to produce a single ANGSD reference per domain. To reduce the memory requirements for the northern domain, we divided the 775 samples in three groups and processed each separately. The resulting northern_pt_aa, northern_pt_ab, and northern_pt_ac references were analyzed seperately until after the site filtering stage. 
 
@@ -59,6 +54,20 @@ split -n l/3 --additional-suffix .txt tmp_shuf.txt northern_bamlist_pt_
 rm tmp_shuf.txt
 ```
 
+Creating ANGSD-ready references is a three-step process:
+
+1. `split_reference.sh`: Divides `picea_newref_target_regions.bed` into 23 subsets, extracts and indexes their FASTA records, and prepares their corresponding ANGSD site and region files. This is is done once. 
+
+There’s nothing special about 23; based on trial runs before running out of memory, ANGSD could analyze ~5,000 scaffolds (+/- 15%) and 300 samples using ~36 Gb of memory, which is convenient for our cluster. 
+
+Then, site discovery on the reference subsets followed by the final reference preparation are done for each domain seperately: 
+
+2. `site_discovery.sh`: Runs ANGSD using the quality filters identified in the parameter sweep (`-minQ 20 -minMapQ 50 -C 100 -baq 0`) and finds sites with <60% missing data. The missing data cutoff is somewhat arbitrary; the goal is simply to make the reference small enough for analysis while leaving some leeway to optimize sample vs. site-level missing data.
+
+3. `prepare_angsd_ref.sh`: Merges the passing sites and produces a single indexed fasta and ANGSD site and region file.
+
+You can submit both steps together using the driver `do_domain_discovery.sh`, which calls the SLURM helper [`submit.sh`](https://github.com/lxsllvn/spruceGBS/blob/main/submit.sh) to reduce job babysitting. The driver launches the 23 discovery jobs and then schedules the collation step with `--dependency=afterok`, so collation runs only if all splits succeed.
+ 
 ## `split_reference.sh` usage
 
 ```bash
@@ -75,6 +84,7 @@ $SCRIPTS/07_site_discovery/split_reference.sh \
 - `$3` - [indexed reference fasta](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
 
 **Outputs**
+
 For each chunk:
 - `target_scaffs_pt_{01..23}.bed` - BED coordinates
 - `target_scaffs_pt_{01..23}.fa` - fasta records
@@ -84,54 +94,29 @@ For each chunk:
 - `target_scaffs_pt_{01..23}_sites.bin` - ANGSD sites index
 - `target_scaffs_pt_{01..23}_sites.idx` - ANGSD sites index
 
-## `site_discovery.sh` usage
+## `do_domain_discovery.sh` usage
 
 ```bash
 #!/bin/bash
-for i in {01..23}; do
-	"$SCRIPTS/07_site_discovery/site_discovery.sh" \
-	"$i" \
-	"southern" \
- "${SPRUCE_PROJECT}/site_discovery/southern_bamlist.txt" \
- "${SPRUCE_PROJECT}/ref/subsets" \
- "${SPRUCE_PROJECT}/ref/subsets/southern"
-done
+$SCRIPTS/07_site_discovery/do_domain_discovery.sh \
+"southern" \
+"${SPRUCE_PROJECT}/site_discovery/southern_bamlist.txt" \
+"${SPRUCE_PROJECT}/ref/subsets" \
+"${SPRUCE_PROJECT}/ref/southern" \
+"${SPRUCE_PROJECT}/ref/picea_newref.fa"
 ```
 
 **Inputs**
-- `$1` - index denoting the `01, ..., 23` chunk
-- `$2` - domain or sample group (e.g. `southern`, `northern_pt_aa`)
-- `$3` - path to the BAM list file (list of input BAMs)
-- `$4` - path to directiory with the `*.fa`, `*.fai`, `*_region` and `*_site` files created by `split_reference.sh`
-- `$5` - output directory; will create if it doesn't exist
+
+- `$1` - domain or sample group (e.g. `southern`, `northern_pt_aa`)
+- `$2` - path to the BAM list file (list of input BAMs)
+- `$3` - path to directiory with the `*.fa`, `*.fai`, `*_region` and `*_site` files created by `split_reference.sh`
+- `$4` - output directory; will create if it doesn't exist
+- `$5` - [indexed reference fasta](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
     
 **Outputs**
-- `${DOMAIN}/${DOMAIN}_pt_{01..23}.counts.gz` - read count matrices for each chunk
-- `${DOMAIN}/${DOMAIN}_pt_{01..23}.pos.gz` - scaffold and position names for each chunk
 
-## `prepare_angsd_ref.sh` usage
-
-In the final step, `prepare_angsd_ref.sh` in `--splits` mode creates the merged reference and associated files. When `--splits` mode is invoked, the script takes a directory containing multiple `*.pos.gz` files (i.e., the files created by `site_discovery.sh`) and converts each to BED format, merges and sorts them into a master BED, creates the ANGSD region and indexed sites files, and finally builds and indexes a FASTA comprising the unique scaffolds. 
-
-```bash
-#!/bin/bash
-$SCRIPTS/07_site_discovery/prepare_angsd_ref.sh \
- --splits \
- "southern" \
- "${SPRUCE_PROJECT}/ref/subsets/southern" \
- "${SPRUCE_PROJECT}/ref/picea_newref.fa" \
- "${SPRUCE_PROJECT}/ref/southern"
-```
-
-**Inputs**
-- `$1` - run mode flag
-- `$2` - domain or sample group (e.g. `southern`, `northern_pt_aa`) 
-- `$3` - directory containing `*.pos.gz` files (e.g., `southern_pt_01.pos.gz`)
-- `$4` - [indexed reference fasta](https://github.com/lxsllvn/spruceGBS/tree/main/02_reduced_ref)
-- `$5` - output directory for results; will create if it doesn't exist
-
-**Outputs**
-An ANGSD-ready reference assembly for each domain:
+An ANGSD-ready reference assembly:
 - `${DOMAIN}_ref.bed`: merged and sorted BED 
 - `${DOMAIN}_ref_sites`: ANGSD sites file
 - `${DOMAIN}_ref_sites.bin`: ANGSD sites binary index 
@@ -139,6 +124,10 @@ An ANGSD-ready reference assembly for each domain:
 - `${DOMAIN}_ref_regions`: ANGSD region file
 - `${DOMAIN}_ref.fa`: fasta records for unique scaffolds 
 - `${DOMAIN}_ref.fa.fai`: fasta index file
+
+Intermediate results: 
+- `${DOMAIN}/${DOMAIN}_pt_{01..23}.counts.gz` - read count matrices for each chunk
+- `${DOMAIN}/${DOMAIN}_pt_{01..23}.pos.gz` - scaffold and position names for each chunk
 
 ---
 
