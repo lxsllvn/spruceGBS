@@ -26,7 +26,15 @@ static void write_analyze_headers(FILE *fo_site, int suffstats, int emit_hist, i
         if (flankN > 0){
             fprintf(fo_site, "\tflank_cov_mean\tflank_clipfrac_mean");
         }
-        fputc('\n', fo_site);
+        fprintf(fo_site,
+            "\tnA_fwd\tnC_fwd\tnG_fwd\tnT_fwd\tnN_fwd"
+            "\tnA_rev\tnC_rev\tnG_rev\tnT_rev\tnN_rev"
+            "\tdepth_fwd\tdepth_rev"
+            "\tentropy_pooled\talph_eff_pooled"
+            "\tentropy_fwd\talph_eff_fwd"
+            "\tentropy_rev\talph_eff_rev"
+            "\tgc_frac_pooled\tgc_frac_fwd\tgc_frac_rev"
+            "\tstrand_bias_z\n");
     } else {
         fprintf(fo_site,
             "chrom\tpos\tdepth\tmismatch_bases\tins_len_sum\tdel_len_sum\tclip_bases_sum\t"
@@ -38,7 +46,9 @@ static void write_analyze_headers(FILE *fo_site, int suffstats, int emit_hist, i
             "n_clipfrac\tsum_clipfrac\tsumsq_clipfrac\t"
             "n_capped\tsum_delta\tsumsq_delta\t"
             "n_flank_cov\tsum_flank_cov\tsumsq_flank_cov\t"
-            "n_flank_cf\tsum_flank_cf\tsumsq_flank_cf");
+            "n_flank_cf\tsum_flank_cf\tsumsq_flank_cf\t"
+            "nA_fwd\tnC_fwd\tnG_fwd\tnT_fwd\tnN_fwd\t"
+            "nA_rev\tnC_rev\tnG_rev\tnT_rev\tnN_rev");
         if (emit_hist){
             for(int b=0;b<7;b++)  fprintf(fo_site, "\thist_mq_b%d", b);
             for(int b=0;b<7;b++)  fprintf(fo_site, "\thist_eff_b%d", b);
@@ -292,16 +302,9 @@ int analyze_main(int argc, char **argv){
 
             if (!emit_suff) {
                 if (s->depth < min_depth) {
-                    fprintf(fo_site,
-                            "%s\t%d\t"
-                            "NA\tNA\tNA\tNA\tNA\t"
-                            "NA\tNA\tNA\t"
-                            "NA\tNA\tNA\t"
-                            "NA\tNA\tNA\t"
-                            "NA\tNA\tNA\t"
-                            "NA\tNA\tNA",
-                            bed[iv].chr, pos1);
-                    if (flankN > 0) fprintf(fo_site, "\tNA\tNA");
+                    fprintf(fo_site, "%s\t%d", bed[iv].chr, pos1);
+                    int na_fields = 20 + (flankN>0?2:0) + 22;
+                    for (int c=0;c<na_fields;c++) fprintf(fo_site, "\tNA");
                     fputc('\n', fo_site);
                 } else {
                     double mq_mu  = dmean(&s->mq);
@@ -324,6 +327,41 @@ int analyze_main(int argc, char **argv){
                     double cq_med  = dmedian(&s->clipq);
                     double cq_sd   = dsd(&s->clipq);
 
+                    double flank_cov_mean = NAN, flank_cf_mean = NAN;
+                    if (flankN > 0 && pref_mc) {
+                        int left  = i - flankN; if (left  < 0) left  = 0;
+                        int right = i + flankN; if (right >= L) right = L - 1;
+                        int win_len = right - left + 1;
+
+                        long long     mc_win     = pref_mc[right + 1]     - pref_mc[left];
+                        long long     cf_cnt_win = pref_cf_cnt[right + 1] - pref_cf_cnt[left];
+                        long double   cf_sum_win = pref_cf_sum[right + 1] - pref_cf_sum[left];
+
+                        flank_cov_mean = (double)mc_win / (double)win_len;
+                        flank_cf_mean  = (cf_cnt_win > 0)
+                                              ? (double)(cf_sum_win / (long double)cf_cnt_win)
+                                              : NAN;
+                    }
+
+                    long long depth_fwd = s->nA_fwd + s->nC_fwd + s->nG_fwd + s->nT_fwd + s->nN_fwd;
+                    long long depth_rev = s->nA_rev + s->nC_rev + s->nG_rev + s->nT_rev + s->nN_rev;
+
+                    long long nA_tot = s->nA_fwd + s->nA_rev;
+                    long long nC_tot = s->nC_fwd + s->nC_rev;
+                    long long nG_tot = s->nG_fwd + s->nG_rev;
+                    long long nT_tot = s->nT_fwd + s->nT_rev;
+
+                    double ent_pooled = entropy_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
+                    double ent_fwd    = entropy_from_counts(s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd);
+                    double ent_rev    = entropy_from_counts(s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev);
+                    double alph_p     = isnan(ent_pooled) ? NAN : pow(2.0, ent_pooled);
+                    double alph_f     = isnan(ent_fwd)    ? NAN : pow(2.0, ent_fwd);
+                    double alph_r     = isnan(ent_rev)    ? NAN : pow(2.0, ent_rev);
+                    double gc_pooled  = gcfrac_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
+                    double gc_fwd     = gcfrac_from_counts(s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd);
+                    double gc_rev     = gcfrac_from_counts(s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev);
+                    double sb_z       = strand_bias_z(depth_fwd, depth_rev);
+
                     fprintf(fo_site,
                             "%s\t%d\t%d\t%d\t%lld\t%lld\t%lld\t"
                             "%.3f\t%.3f\t%.3f\t"
@@ -338,24 +376,26 @@ int analyze_main(int argc, char **argv){
                             eff_mu, eff_med, eff_sd,
                             sq_mu,  sq_med,  sq_sd,
                             cq_mu,  cq_med,  cq_sd);
+                    if (flankN > 0)
+                        fprintf(fo_site, "\t%.6g\t%.6g", flank_cov_mean, flank_cf_mean);
 
-                    if (flankN > 0 && pref_mc) {
-                        int left  = i - flankN; if (left  < 0) left  = 0;
-                        int right = i + flankN; if (right >= L) right = L - 1;
-                        int win_len = right - left + 1;
-
-                        long long     mc_win     = pref_mc[right + 1]     - pref_mc[left];
-                        long long     cf_cnt_win = pref_cf_cnt[right + 1] - pref_cf_cnt[left];
-                        long double   cf_sum_win = pref_cf_sum[right + 1] - pref_cf_sum[left];
-
-                        double flank_cov_mean = (double)mc_win / (double)win_len;
-                        double flank_cf_mean  = (cf_cnt_win > 0)
-                                              ? (double)(cf_sum_win / (long double)cf_cnt_win)
-                                              : NAN;
-                        fprintf(fo_site, "\t%.6g\t%.6g\n", flank_cov_mean, flank_cf_mean);
-                    } else {
-                        fputc('\n', fo_site);
-                    }
+                    fprintf(fo_site,
+                            "\t%lld\t%lld\t%lld\t%lld\t%lld"
+                            "\t%lld\t%lld\t%lld\t%lld\t%lld"
+                            "\t%lld\t%lld"
+                            "\t%.6g\t%.6g"
+                            "\t%.6g\t%.6g"
+                            "\t%.6g\t%.6g"
+                            "\t%.6g\t%.6g\t%.6g"
+                            "\t%.6g\n",
+                            s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd, s->nN_fwd,
+                            s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev, s->nN_rev,
+                            depth_fwd, depth_rev,
+                            ent_pooled, alph_p,
+                            ent_fwd,   alph_f,
+                            ent_rev,   alph_r,
+                            gc_pooled, gc_fwd, gc_rev,
+                            sb_z);
                 }
 
                 /* free vectors used in direct mode */
@@ -381,6 +421,7 @@ int analyze_main(int argc, char **argv){
                         "0\t0\t0",   /* n_flank_cf,  sum_flank_cf,  sumsq_flank_cf */
                         bed[iv].chr, pos1,
                         s->depth, s->mismatches, s->ins_len_sum, s->del_len_sum, s->clip_bases_sum);
+                    for (int k=0;k<10;k++) fputs("\t0", fo_site);
                     if (emit_hist) {
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t0");
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t0");
@@ -398,7 +439,9 @@ int analyze_main(int argc, char **argv){
                         "%lld\t%.10Lf\t%.10Lf\t"  /* clipfrac */
                         "%lld\t%.10Lf\t%.10Lf\t"  /* capped/delta */
                         "%lld\t%.10Lf\t%.10Lf\t"  /* flank_cov */
-                        "%lld\t%.10Lf\t%.10Lf",   /* flank_cf  */
+                        "%lld\t%.10Lf\t%.10Lf\t"  /* flank_cf  */
+                        "%lld\t%lld\t%lld\t%lld\t%lld\t"
+                        "%lld\t%lld\t%lld\t%lld\t%lld",
                         bed[iv].chr, pos1,
                         s->depth, s->mismatches, s->ins_len_sum, s->del_len_sum, s->clip_bases_sum,
                         s->n_mq,         s->sum_mq,         s->sumsq_mq,
@@ -409,7 +452,9 @@ int analyze_main(int argc, char **argv){
                         s->n_clipfrac,   s->sum_clipfrac,   s->sumsq_clipfrac,
                         s->n_capped,     s->sum_delta,      s->sumsq_delta,
                         s->n_flank_cov,  s->sum_flank_cov,  s->sumsq_flank_cov,
-                        s->n_flank_cf,   s->sum_flank_cf,   s->sumsq_flank_cf);
+                        s->n_flank_cf,   s->sum_flank_cf,   s->sumsq_flank_cf,
+                        s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd, s->nN_fwd,
+                        s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev, s->nN_rev);
                     if (emit_hist) {
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t%d", s->hist_mq[b]);
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t%d", s->hist_eff[b]);
