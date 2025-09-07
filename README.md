@@ -28,7 +28,7 @@ The goal is to produce more reliable estimates of genetic diversity and structur
 
 Additionally, I am using this project to explore ways to make the implementation of customized pipelines more accessible. This includes things like the statistical summaries used in the parameter sweep to make interpretation more scalable and less qualitative, the interpretable machine learning approach using gradient boosted decision trees for variant filtration, and scripts to make parsing the results from `ANGSD` in particular less angst-inducing. The most developed of these tools are:
 - [`mqforensics`](https://github.com/lxsllvn/spruceGBS/tree/main/mqforensics)  - a C program for characterizing mapping quality distributions, including capped (`-C`) qualities, INDELs, clipped bases, mismatches and more from BAM alignments.
-- ['beagle-utils'](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) - a Python package for manipulating and subsetting read count matrices and beagle-formatted genotype likelihoods produced by `ANGSD`.
+- [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) - a Python package for manipulating and subsetting read count matrices and beagle-formatted genotype likelihoods produced by `ANGSD`.
 
 ---
 
