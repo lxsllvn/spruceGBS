@@ -26,7 +26,7 @@ Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpf
 * **`summarize_site_stats.py`**: collects SNP diagnostic metrics from ANGSD outputs and site-level depth summaries
 * **`summarize_site_stats.sh`**: helper for submitting `summarize_site_stats.py` jobs
 * **`reheader_genotype_matrix.sh`**: helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to add informative headers to ANGSD `*.counts.gz` and `*.beagle.gz` files
-* **`read_counts_by_genotype.sh`**: helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to split `*.counts.gz` into homRef/het/ homAlt using by most likely genotype from `*.beagle.gz`
+* **`read_counts_by_genotype.sh`**: helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to split `*.counts.gz` into homRef/het/homAlt using by most likely genotype from `*.beagle.gz`
 * **`subset_genotype_matrix.sh`**:  helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to select samples and/or sites from `*.counts.gz` and `*.beagle.gz`
 * **`do_xgboost.R`**: finalizes features, prepares test/train sets, runs Bayesian parameter optimization, and trains XGBoost model
 * **`do_xgboost.sh`**: helper script to submit `do_xgboost.R` 
@@ -312,7 +312,6 @@ Because such patterns are often noisy and confounded by differences in sequencin
 - **Double standardizations** (locus–sample and sample–locus scaling).
 
 For each normalization, we applied the summaries both to total read counts per site and to genotype-specific read counts per site. We then calculated a comprehensive panel of distributional statistics, including: mean, median, standard deviation, median absolute deviation (MAD), coefficient of variation (CV), interquartile range (IQR), kurtosis, skewness, Shannon entropy, proportion of extreme values, and dip test for unimodality.
-
 
 ---
 
