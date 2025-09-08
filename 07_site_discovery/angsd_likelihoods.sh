@@ -19,6 +19,7 @@ Options:
   -o, --outname NAME     Base name for outputs (required)
   -d, --outdir DIR       Output directory (default: current directory)
   -x, --angsd-args STR   Optional ANGSD args as a single string (can repeat)
+  -n, --no-summary       Skip building site summary tables
   -h, --help             Show this help
   
 Examples:
@@ -33,22 +34,22 @@ Examples:
 USAGE
 }
 
-command -v getopt >/dev/null || { echo "[error] GNU getopt not found"; exit 1; }
-
-
 # -----------------------
 # Parse input options
 # -----------------------
-OUTDIR="."    # Default: current working directory
-EXTRA_OPTS=() # Default: no extra ANGSD args
+OUTDIR="."        # Default: current working directory
+EXTRA_OPTS=()     # Default: no extra ANGSD args
+MAKE_SUMMARY=1    # Default: build site summary tables
+MAF_CUTOFF="0.05" # Default: build MAF > "$MAF_CUTOFF" site summary table
 
 # Ensure GNU getopt is available
-command -v getopt >/dev/null || { echo "[error] GNU getopt not found" >&2; exit 1; }
+command -v getopt >/dev/null || { echo "[error] GNU getopt not found"; exit 1; }
 
-opts=$(getopt -o r:g:s:b:o:d:x:h \
-  --long ref:,region:,sites:,bamlist:,outname:,outdir:,angsd-args:,help \
+opts=$(getopt -o r:g:s:b:o:d:x:hn \
+  --long ref:,region:,sites:,bamlist:,outname:,outdir:,angsd-args:,help,no-summary \
   -n "$0" -- "$@") || { usage; exit 1; }
 eval set -- "$opts"
+
 while true; do
   case "$1" in
     -r|--ref)         REF="$2"; shift 2 ;;
@@ -57,12 +58,12 @@ while true; do
     -b|--bamlist)     BAM="$2"; shift 2 ;;
     -o|--outname)     OUTNAME="$2"; shift 2 ;;
     -d|--outdir)      OUTDIR="$2"; shift 2 ;;
-    -x|--angsd-args)  # split the provided string into separate args
-                      read -r -a _tmp <<< "$2"; EXTRA_OPTS+=("${_tmp[@]}"); shift 2 ;;
+    -x|--angsd-args)  read -r -a _tmp <<< "$2"; EXTRA_OPTS+=("${_tmp[@]}"); shift 2 ;;
+    -n|--no-summary)  MAKE_SUMMARY=0; shift ;;
     -h|--help)        usage; exit 0 ;;
     --) shift; break ;;
     *) echo "Internal parsing error: $1" >&2; exit 1 ;;
- esac
+  esac
 done
 
 # ----- Backward-compatible positionals -----
@@ -72,8 +73,10 @@ if [[ $# -gt 0 && -z "${REGION-}"  ]]; then REGION="$1";  shift; fi
 if [[ $# -gt 0 && -z "${SITES-}"   ]]; then SITES="$1";   shift; fi
 if [[ $# -gt 0 && -z "${BAM-}"     ]]; then BAM="$1";     shift; fi
 if [[ $# -gt 0 && -z "${OUTNAME-}" ]]; then OUTNAME="$1"; shift; fi
-if [[ $# -gt 0 && "${1-}" != "--"  ]]; then OUTDIR="${1:-$OUTDIR}"; [[ $# -gt 0 ]] && shift || true; fi
-# Anything still remaining are extra ANGSD options (e.g., after `--`)
+if [[ $# -gt 0 && "${1-}" != "--"  ]]; then OUTDIR="${1:-$OUTDIR}"; shift || true; fi
+
+# Drop a leading `--` (if user separated extras) then capture remaining as ANGSD extras
+if [[ "${1-}" == "--" ]]; then shift; fi
 if [[ $# -gt 0 ]]; then EXTRA_OPTS+=("$@"); fi
 
 # ----- Required checks -----
@@ -103,7 +106,6 @@ echo "Output path prefix: $OUTPATH"
 # -----------------------
 # ANGSD configuration 
 # -----------------------
-MAF_CUTOFF="0.05" # for the MAF > "$MAF_CUTOFF" site summary table
 P="2" # number of threads
 
 # Filters
@@ -135,6 +137,9 @@ echo "ANGSD completed at $(date)"
 # -----------------------
 # Site summary tables
 # -----------------------
+if [[ "$MAKE_SUMMARY" -eq 1 ]]; then
+  echo "Building site summaries for ${OUTNAME} in ${OUTDIR} at $(date)"
+  
 # Set paths
 POS_GZ="${OUTPATH}.pos.gz"
 COUNTS_GZ="${OUTPATH}.counts.gz"
@@ -151,8 +156,6 @@ thwe=$(mktemp)
 tsnp=$(mktemp)          
 theader=$(mktemp)
 trap 'rm -f "$tpos" "$tcr" "$thwe" "$tsnp" "$theader"' EXIT
-
-echo "Building site summaries for ${OUTNAME} in ${OUTDIR} at $(date)"
 
 # Extract snpcode from .pos.gz  (also captures chr and pos for safety)
 #   Expect header with columns including 'chr' and 'pos'
@@ -312,3 +315,6 @@ echo "Final row counts: all=${n_all}, maf>${MAF_CUTOFF} & <${ONE_MINUS} = ${n_ma
 echo "First 3 snpcodes (sanity):"
 head -n 3 "${tpos}" | cut -f1
 
+else
+  echo "Skipping site summary tables (--no-summary enabled)"
+fi
