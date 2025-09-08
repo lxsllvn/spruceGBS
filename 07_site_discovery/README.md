@@ -23,8 +23,6 @@ Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpf
 * **`prepare_angsd_ref.sh`**: concatenates filtered position files and prepares final region, site, and indexed fasta files
 * **`do_domain_discovery.sh`**: driver to launch `site_discovery.sh` and `prepare_angsd_ref.sh` jobs simultanously 
 * **`angsd_likelihoods.sh`**: runs ANGSD on the prepared reference and outputs genotype likelihoods and site-level summary statistics
-* **`summarize_site_stats.py`**: collects SNP diagnostic metrics from ANGSD outputs and site-level depth summaries
-* **`summarize_site_stats.sh`**: helper for submitting `summarize_site_stats.py` jobs
 * **`reheader_genotype_matrix.sh`**: helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to add informative headers to ANGSD `*.counts.gz` and `*.beagle.gz` files
 * **`read_counts_by_genotype.sh`**: helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to split `*.counts.gz` into homRef/het/homAlt using by most likely genotype from `*.beagle.gz`
 * **`subset_genotype_matrix.sh`**:  helper for [`beagle-utils`](https://github.com/lxsllvn/spruceGBS/tree/main/beagle-utils) CLI to select samples and/or sites from `*.counts.gz` and `*.beagle.gz`
@@ -36,7 +34,8 @@ Implements Step 7: site discovery and filtering of the spruceGBS pipeline. Helpf
 * **`sample_call_rates.sh`**: does stuff
 * **`library_call_thresh.R`**: does stuff
 * **`batch_effects.sh`**: does stuff
-
+* **`summarize_site_stats.py`**: (depreceated) collects SNP diagnostic metrics from ANGSD outputs and site-level depth summaries
+* **`summarize_site_stats.sh`**: (depreceated) for submitting `summarize_site_stats.py` jobs
 ---
 
 # Create ANGSD reference assemblies
@@ -107,7 +106,6 @@ $SCRIPTS/07_site_discovery/do_domain_discovery.sh \
 ```
 
 **Inputs**
-
 - `$1` - domain or sample group (e.g. `southern`, `northern_pt_aa`)
 - `$2` - path to the BAM list file (list of input BAMs)
 - `$3` - path to directiory with the `*.fa`, `*.fai`, `*_region` and `*_site` files created by `split_reference.sh`
@@ -135,33 +133,40 @@ Intermediate results:
 
 At this point, we have identified sites in each domain  that have > 3 uniquely-mapped, properly-paired reads with `-minQ 20 -C 100 -minMapQ 50` in ≥ 40% of the samples. Now, we can actually use `ANGSD` to produce genotype likelihoods in beagle format (`-doGlf 2`), along with allele frequencies (`-doMaf 1`), allele-based SNP quality metrics (`-dosnpstat 1`), and F<sub>is</sub> per site based on genotype likelihoods (`-doHWE 1`). As in the parameter sweep, we designated the major allele based on the reference state (`-doMaf 4`).
 
+By default, `angsd_likelihoods.sh` collects site-level summary statistics (`snpcode`, `call_rate`, `MAF`, `Hexp`, `Hobs`, `F`, `SB1`, `SB2`, `SB3`, `HWE_LRT`, `HWE_pval`, `baseQ_Z`, `baseQ_pval`, `mapQ_Z`, `mapQ_pval`, `edge_z`, `edge_pval`) from the output and writes a table for all sites and MAF > 0.05 sites. `--no-summary` disables this behavior. 
+
 ## `angsd_likelihoods.sh` usage
 
 ```bash
+#!/bin/bash
 $SCRIPTS/07_site_discovery/angsd_likelihoods.sh \
- ${SPRUCE_PROJECT}/ref/siberia/siberia_ref.fa \
- ${SPRUCE_PROJECT}/ref/siberia/siberia_ref_regions \
- ${SPRUCE_PROJECT}/ref/siberia/siberia_ref_sites \
- siberia_bamlist.txt \
- siberia \
- $SPRUCE_PROJECT/site_discovery/siberia
+--ref ${SPRUCE_PROJECT}/ref/siberia/siberia_ref.fa \
+--region ${SPRUCE_PROJECT}/ref/siberia/siberia_ref_regions \
+--sites ${SPRUCE_PROJECT}/ref/siberia/siberia_ref_sites \
+--bamlist siberia_bamlist.txt \
+--outname siberia \
+--outdir $SPRUCE_PROJECT/site_discovery/siberia
 ```
 
 **Inputs**
-- `$1` - [domain reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#prepare_angsd_refsh-usage)
-- `$2` - [domain ANGSD region file](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#prepare_angsd_refsh-usage)
-- `$3` - [domain  ANGSD sites file](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#prepare_angsd_refsh-usage)
-- `$4` - list of BAM files in the domain
-- `$5` - base name for output files
-- `$6` - save directory (optional); current working directory if unspecified
+- `--ref` [domain reference genome](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#do_domain_discoverysh-usage)
+- `--region` [domain ANGSD region file](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#do_domain_discoverysh-usage)
+- `--sites` [domain  ANGSD sites file](https://github.com/lxsllvn/spruceGBS/tree/main/07_site_discovery#do_domain_discoverysh-usage)
+- `--bamlist` list of BAM files in the domain
+- `--outname` base name for output files
+- `--outdir` (optional) save directory; current working directory if unspecified
+- `--angsd-args` (optional) additional arguments to pass to ANGSD 
+- `--no-summary` (optional) skip building site summary tables
 
 **Outputs**
-- `*.beagle.gz` - genotype likelihoods, beagle format
-- `*.counts.gz` - read count matrix
-- `*.hwe.gz` - per-site inbreeding coefficients 
-- `*.mafs.gz` - minor allele frequencies 
-- `*.pos.gz` - scaffold names and positions
-- `*.snpStat.gz` - base quality bias, mapping quality bias, strand bias, and edge bias between reference and alternate allele
+- `${outname}.beagle.gz` genotype likelihoods, beagle format
+- `${outname}.counts.gz` read count matrix
+- `${outname}.hwe.gz` per-site inbreeding coefficients 
+- `${outname}.mafs.gz` minor allele frequencies 
+- `${outname}.pos.gz` scaffold names and positions
+- `${outname}.snpStat.gz`  base quality bias, mapping quality bias, strand bias, and edge bias between reference and alternate allele
+- `${outname}.site_summary_maf05.tsv.gz` summary table for MAF > 0.05 sites 
+- `${outname}.site_summary.tsv.gz` summary table for all sites 
 
 ---
 
@@ -208,25 +213,6 @@ To get started, `ANGSD` provides several commonly used diagnostic metrics based 
 - **`edge_Z`**: Wilcoxon test comparing distances from read edges between alleles.
 - **`SB1`, `SB2`, `SB3`**: three measures of strand bias.
 
-At present, these are collected by `summarize_site_stats.py`, which also calculates some site-level depth summaries from the `*.counts.gz` matrix.  This setup is awkward because we calculate more (and partially overlapping) statistics from `*.counts.gz` later on. I hope to streamline this later on. 
-
-### `summarize_site_stats.sh` usage
-
-```bash
-#!/bin/bash
-$SCRIPTS/07_site_discovery/summarize_site_stats.sh \
-$SPRUCE_PROJECT/site_discovery/siberia \
-siberia 
-```
-
-**Inputs**
-* `$1` - path to folder containing the `*.pos.gz`, `*.counts.gz`, `*.hwe.gz`, and `*.snpStat.gz` files
-* `$2` - output basename for site summary tables
-* `$3` - basename of the `*.pos.gz`, `*.counts.gz`, etc; optional if folder only contains one set of input files. 
-
-**Outputs**
-  * `*_site_summary.tsv` - summary table with columns `snpcode`, `total_depth`, `mean_depth`, `median_depth`, `call_rate`, `cv_depth`, `rel_IQR_depth`, `MAF`, `Hexp`, `Hobs`, `F` , `SB1` ,`SB2`, `SB3`, `HWE_LRT`, `HWE_pval`, `baseQ_Z`, `baseQ_pval`, `mapQ_Z`, `mapQ_pval`, `edge_z`, `edge_pval`
-  * `*_site_summary_maf05.tsv` - as above, but only for MAF > 0.05 sites
 
 ### Depth-based features
 
