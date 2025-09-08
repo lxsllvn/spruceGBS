@@ -2121,7 +2121,8 @@ harvest_path_rules <- function(
     pool_identical    = TRUE,
     trees_per_batch   = 250L,
     progress_every    = 1000L,
-    tighten_monotone  = TRUE
+    tighten_monotone  = TRUE,
+    return_ledger     = TRUE
 ) {
   message(sprintf("[harvest_path_rules] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   stopifnot(is.matrix(leaves) || inherits(leaves, "dgCMatrix"))
@@ -2198,6 +2199,8 @@ harvest_path_rules <- function(
   
   pool_beat <- if (!is.null(progress_every) && progress_every > 0L) progress_every * 5L else NULL
   y_num <- if (!is.null(yvar_train)) as.numeric(yvar_train) else NULL
+  
+  pairs_all <- NULL
   
   if (isTRUE(pool_identical)) {
     # ---- POOL: produce R ------------------------------------------------------
@@ -2414,7 +2417,11 @@ harvest_path_rules <- function(
   data.table::setorderv(R,
                         cols  = c("qval", "lift", "odds_ratio", "precision", "recall"),
                         order = c( 1L,   -1L,     -1L,          -1L,         -1L))
-  R[]
+  if (isTRUE(pool_identical) && isTRUE(return_ledger)) {
+    return(list(R = R[], pairs_all = pairs_all))
+  } else {
+    return(R[])
+  }
 }
 
 #============================
@@ -2438,7 +2445,8 @@ validate_rules_on_test <- function(
     pool_identical     = TRUE,
     trees_per_batch    = 250L,
     progress_every     = 1000L,
-    tighten_monotone   = TRUE
+    tighten_monotone   = TRUE,
+    return_ledger     = TRUE
 ) {
   message(sprintf("[validate_rules_on_test] start: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   stopifnot(is.matrix(leaves_test) || inherits(leaves_test, "dgCMatrix"))
@@ -2508,6 +2516,8 @@ validate_rules_on_test <- function(
   
   y_num <- if (!is.null(yvar_test)) as.numeric(yvar_test) else NULL
   pool_beat <- if (!is.null(progress_every) && progress_every > 0L) progress_every * 5L else NULL
+  
+  pairs_all <- NULL
   
   if (isTRUE(pool_identical)) {
     # ---- POOL: produce R ------------------------------------------------------
@@ -2722,6 +2732,9 @@ validate_rules_on_test <- function(
   data.table::setorderv(R,
                         cols  = c("qval", "lift", "odds_ratio", "precision", "recall"),
                         order = c( 1L,   -1L,     -1L,          -1L,         -1L))
-  R[]
+  if (isTRUE(pool_identical) && isTRUE(return_ledger)) {
+    return(list(R = R[], pairs_all = pairs_all))
+  } else {
+    return(R[])
+  }
 }
-
