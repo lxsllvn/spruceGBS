@@ -356,33 +356,24 @@ int analyze_main(int argc, char **argv){
                                               : NAN;
                     }
 
-                    unsigned long long counts[10];
-                    for (int cc=0; cc<10; cc++) counts[cc] = site_base_count(s, cc);
+                    long long depth_fwd = s->nA_fwd + s->nC_fwd + s->nG_fwd + s->nT_fwd + s->nN_fwd;
+                    long long depth_rev = s->nA_rev + s->nC_rev + s->nG_rev + s->nT_rev + s->nN_rev;
 
-                    unsigned long long depth_fwd =
-                        counts[0] + counts[1] + counts[2] + counts[3] + counts[4];
-                    unsigned long long depth_rev =
-                        counts[5] + counts[6] + counts[7] + counts[8] + counts[9];
-
-                    long long nA_tot = (long long)(counts[0] + counts[5]);
-                    long long nC_tot = (long long)(counts[1] + counts[6]);
-                    long long nG_tot = (long long)(counts[2] + counts[7]);
-                    long long nT_tot = (long long)(counts[3] + counts[8]);
+                    long long nA_tot = s->nA_fwd + s->nA_rev;
+                    long long nC_tot = s->nC_fwd + s->nC_rev;
+                    long long nG_tot = s->nG_fwd + s->nG_rev;
+                    long long nT_tot = s->nT_fwd + s->nT_rev;
 
                     double ent_pooled = entropy_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
-                    double ent_fwd    = entropy_from_counts((long long)counts[0], (long long)counts[1],
-                                                             (long long)counts[2], (long long)counts[3]);
-                    double ent_rev    = entropy_from_counts((long long)counts[5], (long long)counts[6],
-                                                             (long long)counts[7], (long long)counts[8]);
+                    double ent_fwd    = entropy_from_counts(s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd);
+                    double ent_rev    = entropy_from_counts(s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev);
                     double alph_p     = isnan(ent_pooled) ? NAN : pow(2.0, ent_pooled);
                     double alph_f     = isnan(ent_fwd)    ? NAN : pow(2.0, ent_fwd);
                     double alph_r     = isnan(ent_rev)    ? NAN : pow(2.0, ent_rev);
                     double gc_pooled  = gcfrac_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
-                    double gc_fwd     = gcfrac_from_counts((long long)counts[0], (long long)counts[1],
-                                                           (long long)counts[2], (long long)counts[3]);
-                    double gc_rev     = gcfrac_from_counts((long long)counts[5], (long long)counts[6],
-                                                           (long long)counts[7], (long long)counts[8]);
-                    double sb_z       = strand_bias_z((long long)depth_fwd, (long long)depth_rev);
+                    double gc_fwd     = gcfrac_from_counts(s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd);
+                    double gc_rev     = gcfrac_from_counts(s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev);
+                    double sb_z       = strand_bias_z(depth_fwd, depth_rev);
 
                     fprintf(fo_site,
                             "%s\t%d\t%d\t%d\t%lld\t%lld\t%lld\t"
@@ -402,26 +393,22 @@ int analyze_main(int argc, char **argv){
                         fprintf(fo_site, "\t%.6g\t%.6g", flank_cov_mean, flank_cf_mean);
 
                     fprintf(fo_site,
-                            "\t%llu\t%llu\t%llu\t%llu\t%llu"
-                            "\t%llu\t%llu\t%llu\t%llu\t%llu"
-                            "\t%llu\t%llu"
+                            "\t%lld\t%lld\t%lld\t%lld\t%lld"
+                            "\t%lld\t%lld\t%lld\t%lld\t%lld"
+                            "\t%lld\t%lld"
                             "\t%.6g\t%.6g"
                             "\t%.6g\t%.6g"
                             "\t%.6g\t%.6g"
                             "\t%.6g\t%.6g\t%.6g"
                             "\t%.6g\n",
-                            counts[0], counts[1], counts[2], counts[3], counts[4],
-                            counts[5], counts[6], counts[7], counts[8], counts[9],
+                            s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd, s->nN_fwd,
+                            s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev, s->nN_rev,
                             depth_fwd, depth_rev,
                             ent_pooled, alph_p,
                             ent_fwd,   alph_f,
                             ent_rev,   alph_r,
                             gc_pooled, gc_fwd, gc_rev,
                             sb_z);
-                    if (s->base_counts_hi) {
-                        free(s->base_counts_hi);
-                        s->base_counts_hi = NULL;
-                    }
                 }
 
                 /* free vectors used in direct mode */
@@ -472,8 +459,8 @@ int analyze_main(int argc, char **argv){
                         "%lld\t%.10Lf\t%.10Lf\t"  /* capped/delta */
                         "%lld\t%.10Lf\t%.10Lf\t"  /* flank_cov */
                         "%lld\t%.10Lf\t%.10Lf\t"  /* flank_cf  */
-                        "%llu\t%llu\t%llu\t%llu\t%llu\t"
-                        "%llu\t%llu\t%llu\t%llu\t%llu",
+                        "%lld\t%lld\t%lld\t%lld\t%lld\t"
+                        "%lld\t%lld\t%lld\t%lld\t%lld",
                         bed[iv].chr, pos1,
                         s->depth, s->mismatches, s->ins_len_sum, s->del_len_sum, s->clip_bases_sum,
                         s->n_mq,         s->sum_mq,         s->sumsq_mq,
@@ -485,8 +472,8 @@ int analyze_main(int argc, char **argv){
                         s->n_capped,     s->sum_delta,      s->sumsq_delta,
                         s->n_flank_cov,  s->sum_flank_cov,  s->sumsq_flank_cov,
                         s->n_flank_cf,   s->sum_flank_cf,   s->sumsq_flank_cf,
-                        counts[0], counts[1], counts[2], counts[3], counts[4],
-                        counts[5], counts[6], counts[7], counts[8], counts[9]);
+                        s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd, s->nN_fwd,
+                        s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev, s->nN_rev);
                     if (emit_hist) {
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t%d", s->hist_mq[b]);
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t%d", s->hist_eff[b]);

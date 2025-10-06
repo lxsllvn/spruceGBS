@@ -49,7 +49,6 @@ po/*~
 rsconnect/
 
 # SLURM submission scripts
-jobs/
 submit.sh
 
 # SLURM job logs

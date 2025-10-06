@@ -41,9 +41,8 @@ typedef struct {
     long double  sum_flank_cf,  sumsq_flank_cf;
 
     // Phase 2: per-strand base counts (aligned bases only; N tracked)
-    uint16_t nA_fwd, nC_fwd, nG_fwd, nT_fwd, nN_fwd;
-    uint16_t nA_rev, nC_rev, nG_rev, nT_rev, nN_rev;
-    uint32_t *base_counts_hi; // optional overflow counts (10 entries) when depth > UINT16_MAX
+    long long nA_fwd, nC_fwd, nG_fwd, nT_fwd, nN_fwd;
+    long long nA_rev, nC_rev, nG_rev, nT_rev, nN_rev;
 
     // hist bins (per-BAM site; filled only when --emit-hist)
     int hist_mq[7];        // MQ [0..60] in bins of 10

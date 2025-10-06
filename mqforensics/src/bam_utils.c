@@ -186,13 +186,12 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
                     sites[idx].clip_bases_sum += rq->clipped_bases;
 
                     int nt = bam_seqi(seq, rpos+i) & 0xF;
-                    int base_slot = rev ? 5 : 0;
                     switch(nt){
-                        case 1: bump_base_count(&sites[idx], base_slot + 0); break;
-                        case 2: bump_base_count(&sites[idx], base_slot + 1); break;
-                        case 4: bump_base_count(&sites[idx], base_slot + 2); break;
-                        case 8: bump_base_count(&sites[idx], base_slot + 3); break;
-                        default: bump_base_count(&sites[idx], base_slot + 4); break;
+                        case 1: if (rev) sites[idx].nA_rev++; else sites[idx].nA_fwd++; break;
+                        case 2: if (rev) sites[idx].nC_rev++; else sites[idx].nC_fwd++; break;
+                        case 4: if (rev) sites[idx].nG_rev++; else sites[idx].nG_fwd++; break;
+                        case 8: if (rev) sites[idx].nT_rev++; else sites[idx].nT_fwd++; break;
+                        default: if (rev) sites[idx].nN_rev++; else sites[idx].nN_fwd++; break;
                     }
 
                     // histograms
