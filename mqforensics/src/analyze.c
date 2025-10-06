@@ -6,7 +6,7 @@
 #include <htslib/faidx.h>
 #include "common.h"
 
-static inline unsigned long long site_base_count(const Site *s, int slot){
+static inline long long site_base_count(const Site *s, int slot){
     switch (slot) {
         case 0: return s->nA_fwd;
         case 1: return s->nC_fwd;
@@ -359,12 +359,12 @@ int analyze_main(int argc, char **argv){
                                               : NAN;
                     }
 
-                    unsigned long long counts[10];
+                    long long counts[10];
                     for (int cc=0; cc<10; cc++) counts[cc] = site_base_count(s, cc);
 
-                    unsigned long long depth_fwd =
+                    long long depth_fwd =
                         counts[0] + counts[1] + counts[2] + counts[3] + counts[4];
-                    unsigned long long depth_rev =
+                    long long depth_rev =
                         counts[5] + counts[6] + counts[7] + counts[8] + counts[9];
 
                     long long nA_tot = (long long)(counts[0] + counts[5]);
@@ -405,9 +405,9 @@ int analyze_main(int argc, char **argv){
                         fprintf(fo_site, "\t%.6g\t%.6g", flank_cov_mean, flank_cf_mean);
 
                     fprintf(fo_site,
-                            "\t%llu\t%llu\t%llu\t%llu\t%llu"
-                            "\t%llu\t%llu\t%llu\t%llu\t%llu"
-                            "\t%llu\t%llu"
+                            "\t%lld\t%lld\t%lld\t%lld\t%lld"
+                            "\t%lld\t%lld\t%lld\t%lld\t%lld"
+                            "\t%lld\t%lld"
                             "\t%.6g\t%.6g"
                             "\t%.6g\t%.6g"
                             "\t%.6g\t%.6g"
@@ -454,7 +454,7 @@ int analyze_main(int argc, char **argv){
                     }
                     fputc('\n', fo_site);
                 } else {
-                    unsigned long long counts[10];
+                    long long counts[10];
                     for (int cc=0; cc<10; cc++) counts[cc] = site_base_count(s, cc);
                     fprintf(fo_site,
                         "%s\t%d\t%d\t%d\t%lld\t%lld\t%lld\t"
@@ -467,8 +467,8 @@ int analyze_main(int argc, char **argv){
                         "%lld\t%.10Lf\t%.10Lf\t"  /* capped/delta */
                         "%lld\t%.10Lf\t%.10Lf\t"  /* flank_cov */
                         "%lld\t%.10Lf\t%.10Lf\t"  /* flank_cf  */
-                        "%llu\t%llu\t%llu\t%llu\t%llu\t"
-                        "%llu\t%llu\t%llu\t%llu\t%llu",
+                          "%lld\t%lld\t%lld\t%lld\t%lld\t"
+                          "%lld\t%lld\t%lld\t%lld\t%lld",
                         bed[iv].chr, pos1,
                         s->depth, s->mismatches, s->ins_len_sum, s->del_len_sum, s->clip_bases_sum,
                         s->n_mq,         s->sum_mq,         s->sumsq_mq,
