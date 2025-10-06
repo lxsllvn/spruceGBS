@@ -6,15 +6,6 @@
 #include <htslib/faidx.h>
 #include "common.h"
 
-static inline unsigned long long site_base_count(const Site *s, int slot){
-    if (s->base_counts_hi){
-        return s->base_counts_hi[slot];
-    } else {
-        const uint16_t *low = &s->nA_fwd;
-        return low[slot];
-    }
-}
-
 static void usage_an(void){
     fprintf(stderr,
       "Usage: mq_forensics analyze -b BAM -r BED -C INT -d MIN "
@@ -315,10 +306,6 @@ int analyze_main(int argc, char **argv){
                     int na_fields = 20 + (flankN>0?2:0) + 22;
                     for (int c=0;c<na_fields;c++) fprintf(fo_site, "\tNA");
                     fputc('\n', fo_site);
-                    if (s->base_counts_hi) {
-                        free(s->base_counts_hi);
-                        s->base_counts_hi = NULL;
-                    }
                 } else {
                     double mq_mu  = dmean(&s->mq);
                     double mq_med = dmedian(&s->mq);
@@ -441,13 +428,7 @@ int analyze_main(int argc, char **argv){
                         for (int b=0; b<10; b++) fprintf(fo_site, "\t0");
                     }
                     fputc('\n', fo_site);
-                    if (s->base_counts_hi) {
-                        free(s->base_counts_hi);
-                        s->base_counts_hi = NULL;
-                    }
                 } else {
-                    unsigned long long counts[10];
-                    for (int cc=0; cc<10; cc++) counts[cc] = site_base_count(s, cc);
                     fprintf(fo_site,
                         "%s\t%d\t%d\t%d\t%lld\t%lld\t%lld\t"
                         "%lld\t%.10Lf\t%.10Lf\t"  /* mq */
@@ -480,10 +461,6 @@ int analyze_main(int argc, char **argv){
                         for (int b=0; b<10; b++) fprintf(fo_site, "\t%d", s->hist_clipfrac[b]);
                     }
                     fputc('\n', fo_site);
-                    if (s->base_counts_hi) {
-                        free(s->base_counts_hi);
-                        s->base_counts_hi = NULL;
-                    }
                 }
             }
         }
