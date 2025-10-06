@@ -50,3 +50,30 @@ double median_from_hist_uniform_bins(const long long *h, int nbins, double bin0_
     }
     return bin0_left + (nbins-0.5)*bin_width;
 }
+
+// Phase 2 helpers
+double entropy_from_counts(long long nA, long long nC, long long nG, long long nT){
+    long long n = nA + nC + nG + nT;
+    if (n <= 0) return NAN;
+    double H = 0.0;
+    long long v[4] = {nA, nC, nG, nT};
+    for (int i=0;i<4;i++){
+        if (v[i] > 0){
+            double p = (double)v[i] / (double)n;
+            H -= p * (log(p)/log(2.0));
+        }
+    }
+    return H;
+}
+
+double gcfrac_from_counts(long long nA, long long nC, long long nG, long long nT){
+    long long denom = nA + nC + nG + nT;
+    if (denom <= 0) return NAN;
+    return (double)(nC + nG) / (double)denom;
+}
+
+double strand_bias_z(long long depth_fwd, long long depth_rev){
+    long long tot = depth_fwd + depth_rev;
+    if (tot <= 0) return NAN;
+    return (double)(depth_fwd - depth_rev) / sqrt((double)tot);
+}

@@ -11,6 +11,7 @@ Fast C/htslib tool to extract per-site (within a BED) and per-interval mapping s
 - Optional histograms (`--emit-hist`) allow divergences (KS, Wasserstein-1, Jensen–Shannon) and histogram-based medians to be computed later in summarize.
 - Optional flanking-region context (`--flank N`, `--ref-only`) computes per-site windowed means of coverage and clip-fraction in the surrounding region, optionally restricted to ref-matching bases only.
 - Summarizer reduces hundreds of per-sample TSVs (concatenated/sorted) into pooled per-site summary statistics across samples.
+- Phase 2 adds per-strand base counts, base-composition entropy, GC fractions, and strand-bias metrics at every site.
 
 # Build
 
@@ -95,6 +96,10 @@ effmq_mean  effmq_median  effmq_sd
 subQ_mean  subQ_median  subQ_sd
 clipQ_mean  clipQ_median  clipQ_sd
 [flank_cov_mean  flank_clipfrac_mean]   # if --flank enabled
+nA_fwd  nC_fwd  nG_fwd  nT_fwd  nN_fwd  nA_rev  nC_rev  nG_rev  nT_rev  nN_rev  depth_fwd  depth_rev
+entropy_pooled  alph_eff_pooled  entropy_fwd  alph_eff_fwd  entropy_rev  alph_eff_rev
+gc_frac_pooled  gc_frac_fwd  gc_frac_rev
+strand_bias_z
 ```
 
 **Per-site (suffstats mode)**
@@ -110,6 +115,7 @@ n_clipfrac sum_clipfrac sumsq_clipfrac
 n_capped sum_delta sumsq_delta
 [n_flank_cov sum_flank_cov sumsq_flank_cov
  n_flank_cf  sum_flank_cf  sumsq_flank_cf]   # if --flank enabled
+nA_fwd nC_fwd nG_fwd nT_fwd nN_fwd nA_rev nC_rev nG_rev nT_rev nN_rev
 [hists …]   # if --emit-hist
 ```
 
@@ -126,6 +132,7 @@ From suffstats input, `summarize` produces:
 - pooled mean & SD for: MQ, capMQ, effMQ, SubQ, ClipQ, clipfrac
 - capping load: frac_capped, delta mean/sd
 - flanking context pooled stats: flank_cov_mean/sd, flank_cf_mean/sd (if present)
+- per-strand base composition: entropy (bits and effective alphabet), GC fractions (pooled/fwd/rev), strand-bias z-score
 - optional divergences & histogram-based medians if `--emit-hist`
 
 

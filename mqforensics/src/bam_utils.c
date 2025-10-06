@@ -3,8 +3,35 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <stdint.h>
 #include <htslib/sam.h>
 #include "common.h"
+
+static inline void ensure_base_counts_hi(Site *s){
+    if (!s->base_counts_hi){
+        s->base_counts_hi = (uint32_t*)malloc(10 * sizeof(uint32_t));
+        if (!s->base_counts_hi){ perror("malloc"); exit(1); }
+        uint16_t *low = &s->nA_fwd;
+        for (int i=0;i<10;i++){
+            s->base_counts_hi[i] = (uint32_t)low[i];
+            low[i] = 0;
+        }
+    }
+}
+
+static inline void bump_base_count(Site *s, int slot){
+    if (s->base_counts_hi){
+        s->base_counts_hi[slot]++;
+    } else {
+        uint16_t *low = &s->nA_fwd;
+        if (low[slot] == UINT16_MAX){
+            ensure_base_counts_hi(s);
+            s->base_counts_hi[slot]++;
+        } else {
+            low[slot]++;
+        }
+    }
+}
 
 // xstrdup
 static char* xstrdup(const char* s){
@@ -141,6 +168,8 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
     const uint32_t *cig=bam_get_cigar(b); int nc=b->core.n_cigar;
     if (b->core.tid != iv_tid) return 0;
     int64_t ref=b->core.pos; int rpos=0; long long aligned_bp=0;
+    uint8_t *seq = bam_get_seq(b);
+    bool rev = (b->core.flag & BAM_FREVERSE) != 0;
     for(int k=0;k<nc;k++){
         int op=bam_cigar_op(cig[k]), ln=bam_cigar_oplen(cig[k]);
         if (op==BAM_CMATCH||op==BAM_CEQUAL||op==BAM_CDIFF){
@@ -155,6 +184,16 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
                     vpush(&sites[idx].subq, rq->SubQ);
                     vpush(&sites[idx].clipq, rq->ClipQ);
                     sites[idx].clip_bases_sum += rq->clipped_bases;
+
+                    int nt = bam_seqi(seq, rpos+i) & 0xF;
+                    int base_slot = rev ? 5 : 0;
+                    switch(nt){
+                        case 1: bump_base_count(&sites[idx], base_slot + 0); break;
+                        case 2: bump_base_count(&sites[idx], base_slot + 1); break;
+                        case 4: bump_base_count(&sites[idx], base_slot + 2); break;
+                        case 8: bump_base_count(&sites[idx], base_slot + 3); break;
+                        default: bump_base_count(&sites[idx], base_slot + 4); break;
+                    }
 
                     // histograms
                     int mqbin = rq->mapq_raw/10; if(mqbin<0) mqbin=0; if(mqbin>6) mqbin=6; sites[idx].hist_mq[mqbin]++;
