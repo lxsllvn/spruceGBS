@@ -3,35 +3,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-#include <stdint.h>
 #include <htslib/sam.h>
 #include "common.h"
-
-static inline void ensure_base_counts_hi(Site *s){
-    if (!s->base_counts_hi){
-        s->base_counts_hi = (uint32_t*)malloc(10 * sizeof(uint32_t));
-        if (!s->base_counts_hi){ perror("malloc"); exit(1); }
-        uint16_t *low = &s->nA_fwd;
-        for (int i=0;i<10;i++){
-            s->base_counts_hi[i] = (uint32_t)low[i];
-            low[i] = 0;
-        }
-    }
-}
-
-static inline void bump_base_count(Site *s, int slot){
-    if (s->base_counts_hi){
-        s->base_counts_hi[slot]++;
-    } else {
-        uint16_t *low = &s->nA_fwd;
-        if (low[slot] == UINT16_MAX){
-            ensure_base_counts_hi(s);
-            s->base_counts_hi[slot]++;
-        } else {
-            low[slot]++;
-        }
-    }
-}
 
 // xstrdup
 static char* xstrdup(const char* s){
