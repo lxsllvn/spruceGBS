@@ -40,6 +40,10 @@ typedef struct {
     long long    n_flank_cf;
     long double  sum_flank_cf,  sumsq_flank_cf;
 
+    // Phase 2: per-strand base counts (aligned bases only; N tracked)
+    long long nA_fwd, nC_fwd, nG_fwd, nT_fwd, nN_fwd;
+    long long nA_rev, nC_rev, nG_rev, nT_rev, nN_rev;
+
     // hist bins (per-BAM site; filled only when --emit-hist)
     int hist_mq[7];        // MQ [0..60] in bins of 10
     int hist_eff[7];       // effMQ [0..60] in bins of 10
@@ -81,6 +85,10 @@ typedef struct {
     long long    n_flank_cf;
     long double  sum_flank_cf,  sumsq_flank_cf;
 
+    // Phase 2 pooled counts
+    long long nA_fwd, nC_fwd, nG_fwd, nT_fwd, nN_fwd;
+    long long nA_rev, nC_rev, nG_rev, nT_rev, nN_rev;
+
     // pooled hists
     long long hist_mq[7], hist_eff[7], hist_clipfrac[10];
     bool have_hist;
@@ -93,6 +101,23 @@ double dmean(const vecd *x);
 double dmedian(vecd *x);
 double dsd(const vecd *x);
 double median_from_hist_uniform_bins(const long long *h, int nbins, double bin0_left, double bin_width);
+
+double entropy_from_counts(long long nA, long long nC, long long nG, long long nT);
+double gcfrac_from_counts(long long nA, long long nC, long long nG, long long nT);
+double strand_bias_z(long long depth_fwd, long long depth_rev);
+
+static inline void site_get_base_counts(const Site *s, long long out[10]){
+    out[0] = s->nA_fwd;
+    out[1] = s->nC_fwd;
+    out[2] = s->nG_fwd;
+    out[3] = s->nT_fwd;
+    out[4] = s->nN_fwd;
+    out[5] = s->nA_rev;
+    out[6] = s->nC_rev;
+    out[7] = s->nG_rev;
+    out[8] = s->nT_rev;
+    out[9] = s->nN_rev;
+}
 
 // hist.c
 void hist_accum_mq(int *hist7, int mq0_60);
