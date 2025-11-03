@@ -207,43 +207,74 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
     return aligned_bp;
 }
 
+static int *mm_offsets = NULL;
+static int mm_offsets_cap = 0;
+
 void add_local_mismatches(const bam1_t *b, int iv_tid, int iv_start, int iv_end, Site *sites){
     if (b->core.tid != iv_tid) return;
-    const uint32_t *cig=bam_get_cigar(b); int nc=b->core.n_cigar;
-    int64_t ref=b->core.pos; int rpos=0, cap=0;
-    for(int k=0;k<nc;k++){
-        int op=bam_cigar_op(cig[k]), ln=bam_cigar_oplen(cig[k]);
-        if (op==BAM_CMATCH||op==BAM_CEQUAL||op==BAM_CDIFF) cap+=ln;
-        else if (op==BAM_CINS||op==BAM_CSOFT_CLIP) rpos+=ln;
-        else if (op==BAM_CDEL||op==BAM_CREF_SKIP) ref+=ln;
-    }
-    int64_t *refpos = cap? (int64_t*)malloc(cap*sizeof(int64_t)) : NULL;
-    if (cap && !refpos){ perror("malloc"); exit(1); }
-    ref=b->core.pos; rpos=0; int idx=0;
-    for(int k=0;k<nc;k++){
-        int op=bam_cigar_op(cig[k]), ln=bam_cigar_oplen(cig[k]);
-        if (op==BAM_CMATCH||op==BAM_CEQUAL||op==BAM_CDIFF){
-            for(int i=0;i<ln;i++) refpos[idx++]=ref+i;
-            ref+=ln; rpos+=ln;
-        } else if (op==BAM_CINS){ rpos+=ln; }
-        else if (op==BAM_CDEL||op==BAM_CREF_SKIP){ ref+=ln; }
-        else if (op==BAM_CSOFT_CLIP){ rpos+=ln; }
-    }
     uint8_t *mdp=bam_aux_get(b,"MD");
-    if (mdp){
-        const char *md=bam_aux2Z(mdp); int ai=0; const char *p=md;
-        while (*p){
-            if (isdigit((unsigned char)*p)){ int v=0; while(isdigit((unsigned char)*p)){ v=v*10+(*p-'0'); ++p; } ai+=v; }
-            else if (*p=='^'){ ++p; while(*p && isalpha((unsigned char)*p)) ++p; }
-            else if (isalpha((unsigned char)*p)){
-                if (ai<cap){
-                    int64_t rp=refpos[ai];
-                    if (rp>=iv_start && rp<iv_end){ int sidx=(int)(rp - iv_start); sites[sidx].mismatches++; }
-                    ai++;
-                }
+    if (!mdp) return;
+    const char *md = bam_aux2Z(mdp);
+    if (!md) return;
+
+    int aligned_idx = 0;
+    int mm_count = 0;
+    const char *p = md;
+    while (*p){
+        unsigned char c = (unsigned char)*p;
+        if (isdigit(c)){
+            int v = 0;
+            while (isdigit((unsigned char)*p)){
+                v = v*10 + (*p - '0');
                 ++p;
-            } else ++p;
+            }
+            aligned_idx += v;
+        } else if (*p == '^'){
+            ++p;
+            while (*p && isalpha((unsigned char)*p)) ++p;
+        } else if (isalpha(c)){
+            if (mm_count == mm_offsets_cap){
+                int new_cap = mm_offsets_cap ? mm_offsets_cap * 2 : 64;
+                int *tmp = (int*)realloc(mm_offsets, (size_t)new_cap * sizeof(int));
+                if (!tmp){ perror("realloc"); exit(1); }
+                mm_offsets = tmp;
+                mm_offsets_cap = new_cap;
+            }
+            mm_offsets[mm_count++] = aligned_idx;
+            aligned_idx++;
+            ++p;
+        } else {
+            ++p;
         }
     }
-    if (refpos) free(refpos);
+
+    if (mm_count == 0) return;
+
+    const uint32_t *cig = bam_get_cigar(b); int nc = b->core.n_cigar;
+    int64_t ref = b->core.pos;
+    int match_idx = 0;
+    int mm_idx = 0;
+
+    for (int k=0; k<nc && mm_idx < mm_count; k++){
+        int op = bam_cigar_op(cig[k]);
+        int ln = bam_cigar_oplen(cig[k]);
+        if (op==BAM_CMATCH||op==BAM_CEQUAL||op==BAM_CDIFF){
+            for (int i=0; i<ln && mm_idx < mm_count; i++){
+                if (mm_offsets[mm_idx] == match_idx){
+                    int64_t rp = ref + i;
+                    if (rp>=iv_start && rp<iv_end){
+                        int sidx = (int)(rp - iv_start);
+                        sites[sidx].mismatches++;
+                    }
+                    mm_idx++;
+                }
+                match_idx++;
+            }
+            ref += ln;
+        } else if (op==BAM_CDEL || op==BAM_CREF_SKIP){
+            ref += ln;
+        } else if (op==BAM_CINS || op==BAM_CSOFT_CLIP){
+            // insertions and soft clips consume read bases but are not represented in MD offsets
+        }
+    }
 }
