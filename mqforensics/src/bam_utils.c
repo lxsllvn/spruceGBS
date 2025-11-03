@@ -47,6 +47,11 @@ static inline int right_clip_len(const bam1_t *b, int op){
 typedef struct { int rp; int bq; } Mismatch;
 
 static Mismatch* mismatches_from_MD(const bam1_t *b, int *n_out){
+    static int *aligned = NULL;
+    static int aligned_cap = 0;
+    static Mismatch *mm = NULL;
+    static int mm_cap = 0;
+
     uint8_t *mdp=bam_aux_get(b,"MD"); if(!mdp){ *n_out=0; return NULL; }
     const char *md=bam_aux2Z(mdp); if(!md){ *n_out=0; return NULL; }
 
@@ -57,8 +62,12 @@ static Mismatch* mismatches_from_MD(const bam1_t *b, int *n_out){
         if (op==BAM_CMATCH||op==BAM_CEQUAL||op==BAM_CDIFF) cap+=ln;
         else if (op==BAM_CINS||op==BAM_CSOFT_CLIP) rpos+=ln;
     }
-    int *aligned = cap? (int*)malloc(cap*sizeof(int)) : NULL;
-    if (cap && !aligned){ perror("malloc"); exit(1); }
+    if (cap > aligned_cap){
+        int *tmp = (int*)realloc(aligned, cap*sizeof(int));
+        if (!tmp){ perror("realloc"); exit(1); }
+        aligned = tmp;
+        aligned_cap = cap;
+    }
     int idx=0; rpos=0;
     for(int k=0;k<nc;k++){
         int op=bam_cigar_op(cig[k]), ln=bam_cigar_oplen(cig[k]);
@@ -66,7 +75,12 @@ static Mismatch* mismatches_from_MD(const bam1_t *b, int *n_out){
         else if (op==BAM_CINS||op==BAM_CSOFT_CLIP){ rpos+=ln; }
     }
     uint8_t *qual=bam_get_qual(b);
-    Mismatch *mm = cap? (Mismatch*)malloc(cap*sizeof(Mismatch)) : NULL; if(cap && !mm){ perror("malloc"); exit(1); }
+    if (cap > mm_cap){
+        Mismatch *tmp = (Mismatch*)realloc(mm, cap*sizeof(Mismatch));
+        if (!tmp){ perror("realloc"); exit(1); }
+        mm = tmp;
+        mm_cap = cap;
+    }
     int mmn=0; const char *p=md; int ai=0;
     while (*p){
         if (isdigit((unsigned char)*p)){
@@ -80,7 +94,8 @@ static Mismatch* mismatches_from_MD(const bam1_t *b, int *n_out){
             ++p;
         } else ++p;
     }
-    free(aligned); *n_out=mmn; return mm;
+    *n_out=mmn;
+    return (mmn>0) ? mm : NULL;
 }
 
 // per-read QC and cap MQ
@@ -115,7 +130,7 @@ void compute_read_qc(const bam1_t *b, int C, ReadQC *out){
             out->SubQ += (mm[i].bq < BQ_CAP ? mm[i].bq : BQ_CAP);
         }
     }
-    if (mm) free(mm);
+    /* mismatches_from_MD returns an internal buffer; do not free */
 
     double t=0.0;
     if (out->X_ge13>0 && out->M_q13>0){
