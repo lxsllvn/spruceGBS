@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <ctype.h>
 #include <math.h>
 #include <htslib/sam.h>
@@ -11,6 +12,48 @@ static char* xstrdup(const char* s){
     size_t n=strlen(s)+1; char *p=(char*)malloc(n);
     if(!p){ perror("malloc"); exit(1); }
     memcpy(p,s,n); return p;
+}
+
+static uint16_t *mqf_seen = NULL;
+static int mqf_seen_len = 0;
+static int mqf_seen_cap = 0;
+static long long mqf_tile_start = 0;
+
+static inline int mqf_cap_active(void){
+    return (mqf_seen && mqf_seen_cap > 0);
+}
+
+void mqf_set_cap(uint16_t *seen_arr, int len, int cap, long long tile_start){
+    if (cap <= 0 || !seen_arr){
+        mqf_seen = NULL;
+        mqf_seen_len = 0;
+        mqf_seen_cap = 0;
+        mqf_tile_start = tile_start;
+        return;
+    }
+    mqf_seen = seen_arr;
+    mqf_seen_len = len;
+    mqf_tile_start = tile_start;
+    mqf_seen_cap = cap > 65535 ? 65535 : cap;
+    memset(mqf_seen, 0, (size_t)len * sizeof(uint16_t));
+}
+
+static inline int mqf_allow_rp(long long rp){
+    if (!mqf_cap_active()) return 1;
+    long long off = rp - mqf_tile_start;
+    if (off < 0 || off >= mqf_seen_len) return 1;
+    uint16_t *slot = &mqf_seen[off];
+    if (*slot >= mqf_seen_cap) return 0;
+    (*slot)++;
+    return 1;
+}
+
+static inline void mqf_unsee_rp(long long rp){
+    if (!mqf_cap_active()) return;
+    long long off = rp - mqf_tile_start;
+    if (off < 0 || off >= mqf_seen_len) return;
+    uint16_t *slot = &mqf_seen[off];
+    if (*slot > 0) (*slot)--;
 }
 
 // BED reader
@@ -152,7 +195,7 @@ void compute_read_qc(const bam1_t *b, int C, ReadQC *out){
 }
 
 // apply read to interval & add local features
-long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int iv_end, const ReadQC *rq, Site *sites){
+long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int iv_end, const ReadQC *rq, Site *sites, int emit_suff, int emit_hist){
     const uint32_t *cig=bam_get_cigar(b); int nc=b->core.n_cigar;
     if (b->core.tid != iv_tid) return 0;
     int64_t ref=b->core.pos; int rpos=0; long long aligned_bp=0;
@@ -164,32 +207,53 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
             for(int i=0;i<ln;i++){
                 int64_t rp=ref+i;
                 if (rp>=iv_start && rp<iv_end){
-                    int idx=(int)(rp - iv_start);
-                    sites[idx].depth++;
-                    vpush(&sites[idx].mq, rq->mapq_raw);
-                    vpush(&sites[idx].capmq, rq->cap_mq60);
-                    vpush(&sites[idx].effmq, rq->eff_mq60);
-                    vpush(&sites[idx].subq, rq->SubQ);
-                    vpush(&sites[idx].clipq, rq->ClipQ);
-                    sites[idx].clip_bases_sum += rq->clipped_bases;
+                    if (mqf_allow_rp(rp)){
+                        int idx=(int)(rp - iv_start);
+                        Site *s = &sites[idx];
+                        s->depth++;
+                        vpush(&s->mq, rq->mapq_raw);
+                        vpush(&s->capmq, rq->cap_mq60);
+                        vpush(&s->effmq, rq->eff_mq60);
+                        vpush(&s->subq, rq->SubQ);
+                        vpush(&s->clipq, rq->ClipQ);
+                        s->clip_bases_sum += rq->clipped_bases;
 
-                    int nt = bam_seqi(seq, rpos+i) & 0xF;
-                    switch(nt){
-                        case 1: if (rev) sites[idx].nA_rev++; else sites[idx].nA_fwd++; break;
-                        case 2: if (rev) sites[idx].nC_rev++; else sites[idx].nC_fwd++; break;
-                        case 4: if (rev) sites[idx].nG_rev++; else sites[idx].nG_fwd++; break;
-                        case 8: if (rev) sites[idx].nT_rev++; else sites[idx].nT_fwd++; break;
-                        default: if (rev) sites[idx].nN_rev++; else sites[idx].nN_fwd++; break;
+                        int nt = bam_seqi(seq, rpos+i) & 0xF;
+                        switch(nt){
+                            case 1: if (rev) s->nA_rev++; else s->nA_fwd++; break;
+                            case 2: if (rev) s->nC_rev++; else s->nC_fwd++; break;
+                            case 4: if (rev) s->nG_rev++; else s->nG_fwd++; break;
+                            case 8: if (rev) s->nT_rev++; else s->nT_fwd++; break;
+                            default: if (rev) s->nN_rev++; else s->nN_fwd++; break;
+                        }
+
+                        int mqbin = rq->mapq_raw/10; if(mqbin<0) mqbin=0; if(mqbin>6) mqbin=6; s->hist_mq[mqbin]++;
+                        int efbin = rq->eff_mq60/10; if(efbin<0) efbin=0; if(efbin>6) efbin=6; s->hist_eff[efbin]++;
+                        double clipfrac = (double)rq->clipped_bases / (double)b->core.l_qseq;
+                        if (clipfrac < 0.0) { clipfrac = 0.0; }
+                        else if (clipfrac > 1.0) { clipfrac = 1.0; }
+                        int cfbin = (int)floor(clipfrac*10.0); if (cfbin<0) cfbin=0; if (cfbin>9) cfbin=9;
+                        s->hist_clipfrac[cfbin]++;
+
+                        if (emit_hist){
+                            hist_accum_mq(s->hist_mq, rq->mapq_raw);
+                            hist_accum_eff(s->hist_eff, rq->eff_mq60);
+                            hist_accum_clipfrac(s->hist_clipfrac, clipfrac);
+                        }
+
+                        if (emit_suff){
+                            int raw=rq->mapq_raw, cap=rq->cap_mq60, eff=rq->eff_mq60;
+                            double d = (double)raw - (double)eff;
+                            s->n_mq++;    s->sum_mq += raw; s->sumsq_mq += (long double)raw*raw;
+                            s->n_cap++;   s->sum_cap += cap; s->sumsq_cap += (long double)cap*cap;
+                            s->n_eff++;   s->sum_eff += eff; s->sumsq_eff += (long double)eff*eff;
+                            s->n_subQ++;  s->sum_subQ += rq->SubQ; s->sumsq_subQ += (long double)rq->SubQ*rq->SubQ;
+                            s->n_clipQ++; s->sum_clipQ += rq->ClipQ; s->sumsq_clipQ += (long double)rq->ClipQ*rq->ClipQ;
+                            s->n_clipfrac++; s->sum_clipfrac += clipfrac; s->sumsq_clipfrac += (long double)clipfrac*clipfrac;
+                            if (raw > cap) s->n_capped++;
+                            s->sum_delta += d; s->sumsq_delta += d*d;
+                        }
                     }
-
-                    // histograms
-                    int mqbin = rq->mapq_raw/10; if(mqbin<0) mqbin=0; if(mqbin>6) mqbin=6; sites[idx].hist_mq[mqbin]++;
-                    int efbin = rq->eff_mq60/10; if(efbin<0) efbin=0; if(efbin>6) efbin=6; sites[idx].hist_eff[efbin]++;
-                    double clipfrac = (double)rq->clipped_bases / (double)b->core.l_qseq;
-                    if (clipfrac < 0.0) { clipfrac = 0.0; }
-                    else if (clipfrac > 1.0) { clipfrac = 1.0; }
-                    int cfbin = (int)floor(clipfrac*10.0); if (cfbin<0) cfbin=0; if (cfbin>9) cfbin=9;
-                    sites[idx].hist_clipfrac[cfbin]++;
                 }
             }
             int64_t segL=ref, segR=ref+ln;
@@ -201,19 +265,27 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
             for(int i=0;i<ln;i++){
                 int64_t rp=ref+i;
                 if (rp>=iv_start && rp<iv_end){
-                    int idx=(int)(rp - iv_start);
-                    sites[idx].depth++;
+                    if (mqf_allow_rp(rp)){
+                        int idx=(int)(rp - iv_start);
+                        sites[idx].depth++;
+                    }
                 }
             }
             if (ref>=iv_start && ref<iv_end){
-                int idx=(int)(ref - iv_start);
-                sites[idx].del_len_sum += ln;
+                if (mqf_allow_rp(ref)){
+                    int idx=(int)(ref - iv_start);
+                    sites[idx].del_len_sum += ln;
+                    mqf_unsee_rp(ref);
+                }
             }
             ref+=ln;
         } else if (op==BAM_CINS){
             if (ref>=iv_start && ref<iv_end){
-                int idx=(int)(ref - iv_start);
-                sites[idx].ins_len_sum += ln;
+                if (mqf_allow_rp(ref)){
+                    int idx=(int)(ref - iv_start);
+                    sites[idx].ins_len_sum += ln;
+                    mqf_unsee_rp(ref);
+                }
             }
             rpos+=ln;
         } else if (op==BAM_CREF_SKIP){ ref+=ln; }
@@ -278,8 +350,11 @@ void add_local_mismatches(const bam1_t *b, int iv_tid, int iv_start, int iv_end,
                 if (mm_offsets[mm_idx] == match_idx){
                     int64_t rp = ref + i;
                     if (rp>=iv_start && rp<iv_end){
-                        int sidx = (int)(rp - iv_start);
-                        sites[sidx].mismatches++;
+                        if (mqf_allow_rp(rp)){
+                            int sidx = (int)(rp - iv_start);
+                            sites[sidx].mismatches++;
+                            mqf_unsee_rp(rp);
+                        }
                     }
                     mm_idx++;
                 }

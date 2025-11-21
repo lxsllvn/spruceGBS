@@ -124,8 +124,9 @@ static inline char nt16_to_base_uc(int nt16){
 int read_bed(const char *path, BedIv **out);
 void free_bed(BedIv *a, int n);
 void compute_read_qc(const bam1_t *b, int C, ReadQC *out);   // requires <htslib/sam.h>
-long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int iv_end, const ReadQC *rq, Site *sites);
+long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int iv_end, const ReadQC *rq, Site *sites, int emit_suff, int emit_hist);
 void add_local_mismatches(const bam1_t *b, int iv_tid, int iv_start, int iv_end, Site *sites);
+void mqf_set_cap(uint16_t *seen_arr, int len, int cap, long long tile_start);
 
 // analyze.c
 int analyze_main(int argc, char **argv);

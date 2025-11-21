@@ -17,7 +17,8 @@ static void usage_an(void){
       "Usage: mq_forensics analyze -b BAM -r BED -C INT -d MIN "
       "-o per_site.tsv -O per_interval.tsv "
       "[-f ref.fa] [--flank N] [--ref-only] "
-      "[--emit-suffstats] [--emit-hist]\n");
+      "[--emit-suffstats] [--emit-hist] "
+      "[--max-reads-per-site INT]\n");
 }
 
 static void write_analyze_headers(FILE *fo_site, int suffstats, int emit_hist, int flankN){
@@ -67,6 +68,7 @@ static void write_analyze_headers(FILE *fo_site, int suffstats, int emit_hist, i
 int analyze_main(int argc, char **argv){
     const char *bam_path=NULL, *bed_path=NULL, *out_site=NULL, *out_iv=NULL;
     int C=50, min_depth=0, emit_suff=0, emit_hist=0;
+    int max_reads_per_site = 500;
 
     /* new flank/ref options */
     const char *fasta_path=NULL;
@@ -82,6 +84,7 @@ int analyze_main(int argc, char **argv){
         else if (!strcmp(argv[i],"-O") && i+1<argc) out_iv=argv[++i];
         else if (!strcmp(argv[i],"--emit-suffstats")) emit_suff=1;
         else if (!strcmp(argv[i],"--emit-hist")) emit_hist=1;
+        else if (!strcmp(argv[i],"--max-reads-per-site") && i+1<argc) max_reads_per_site = atoi(argv[++i]);
         else if ( (!strcmp(argv[i],"-f") || !strcmp(argv[i],"--fasta")) && i+1<argc) fasta_path = argv[++i];
         else if (!strcmp(argv[i],"--flank") && i+1<argc) flankN = atoi(argv[++i]);
         else if (!strcmp(argv[i],"--ref-only")) ref_only = 1;
@@ -132,6 +135,12 @@ int analyze_main(int argc, char **argv){
             if (L <= 0) continue;
 
             Site *sites = (Site*)calloc(L, sizeof(Site)); if(!sites){ perror("calloc"); exit(1); }
+            uint16_t *seen = NULL;
+            if (max_reads_per_site > 0){
+                seen = (uint16_t*)calloc(L, sizeof(uint16_t));
+                if (!seen){ perror("calloc"); exit(1); }
+            }
+            mqf_set_cap(seen, L, max_reads_per_site, T0);
 
             long long *match_count = NULL, *cf_cnt = NULL;
             long double *cf_sum = NULL;
@@ -169,6 +178,8 @@ int analyze_main(int argc, char **argv){
                 fprintf(stderr,"WARN: bad iterator for %s:%lld-%lld\n", bed[iv].chr, (long long)T0, (long long)T1);
                 if (refseq) free(refseq);
                 free(match_count); free(cf_cnt); free(cf_sum);
+                mqf_set_cap(NULL, 0, 0, T0);
+                free(seen);
                 free(sites);
                 continue;
             }
@@ -179,55 +190,9 @@ int analyze_main(int argc, char **argv){
 
                 ReadQC rq; compute_read_qc(b, C, &rq);
                 aligned_bp_sum_tile += apply_read_to_interval(
-                    b, tid, (int)T0, (int)T1, &rq, sites
+                    b, tid, (int)T0, (int)T1, &rq, sites, emit_suff, emit_hist
                 );
                 add_local_mismatches(b, tid, (int)T0, (int)T1, sites);
-
-                if (emit_suff || emit_hist){
-                    const uint32_t *cig=bam_get_cigar(b); int nc=b->core.n_cigar;
-                    int64_t ref = b->core.pos;
-                    for(int k=0;k<nc;k++){
-                        int op=bam_cigar_op(cig[k]), ln=bam_cigar_oplen(cig[k]);
-                        if (op==BAM_CMATCH||op==BAM_CEQUAL||op==BAM_CDIFF){
-                            for(int i=0;i<ln;i++){
-                                int64_t rp=ref+i;
-                                if (rp>=T0 && rp<T1){
-                                    int idxs = (int)(rp - T0);
-                                    Site *s = &sites[idxs];
-
-                                    if (emit_suff){
-                                        int raw=rq.mapq_raw, cap=rq.cap_mq60, eff=rq.eff_mq60;
-                                        double d = (double)raw - (double)eff;
-                                        s->n_mq++;    s->sum_mq += raw; s->sumsq_mq += (long double)raw*raw;
-                                        s->n_cap++;   s->sum_cap += cap; s->sumsq_cap += (long double)cap*cap;
-                                        s->n_eff++;   s->sum_eff += eff; s->sumsq_eff += (long double)eff*eff;
-                                        s->n_subQ++;  s->sum_subQ += rq.SubQ; s->sumsq_subQ += (long double)rq.SubQ*rq.SubQ;
-                                        s->n_clipQ++; s->sum_clipQ += rq.ClipQ; s->sumsq_clipQ += (long double)rq.ClipQ*rq.ClipQ;
-
-                                        double cf = (double)rq.clipped_bases / (double)b->core.l_qseq;
-                                        if (cf < 0) cf = 0;
-                                        if (cf > 1) cf = 1;
-                                        s->n_clipfrac++; s->sum_clipfrac += cf; s->sumsq_clipfrac += (long double)cf*cf;
-
-                                        if (raw > cap) s->n_capped++;
-                                        s->sum_delta += d; s->sumsq_delta += d*d;
-                                    }
-                                    if (emit_hist){
-                                        hist_accum_mq(s->hist_mq, rq.mapq_raw);
-                                        hist_accum_eff(s->hist_eff, rq.eff_mq60);
-                                        double cf = (double)rq.clipped_bases / (double)b->core.l_qseq;
-                                        if (cf < 0) cf = 0;
-                                        if (cf > 1) cf = 1;
-                                        hist_accum_clipfrac(s->hist_clipfrac, cf);
-                                    }
-                                }
-                            }
-                            ref += ln;
-                        } else if (op==BAM_CDEL || op==BAM_CREF_SKIP){
-                            ref += ln;
-                        }
-                    }
-                }
 
                 if ((flankN > 0 || ref_only) && refseq){
                     const uint32_t *cig=bam_get_cigar(b); int nc=b->core.n_cigar;
@@ -487,6 +452,8 @@ int analyze_main(int argc, char **argv){
             if (refseq) free(refseq);
             free(match_count); free(cf_cnt); free(cf_sum);
             free(pref_mc); free(pref_cf_cnt); free(pref_cf_sum);
+            mqf_set_cap(NULL, 0, 0, T0);
+            free(seen);
             free(sites);
         }
 
