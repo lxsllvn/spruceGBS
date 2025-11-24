@@ -48,7 +48,9 @@ static void write_analyze_headers(FILE *fo_site, int suffstats, int emit_hist, i
             "n_flank_cov\tsum_flank_cov\tsumsq_flank_cov\t"
             "n_flank_cf\tsum_flank_cf\tsumsq_flank_cf\t"
             "nA_fwd\tnC_fwd\tnG_fwd\tnT_fwd\tnN_fwd\t"
-            "nA_rev\tnC_rev\tnG_rev\tnT_rev\tnN_rev");
+            "nA_rev\tnC_rev\tnG_rev\tnT_rev\tnN_rev\t"
+            "ref_nA_fwd\tref_nC_fwd\tref_nG_fwd\tref_nT_fwd\tref_nN_fwd\t"
+            "ref_nA_rev\tref_nC_rev\tref_nG_rev\tref_nT_rev\tref_nN_rev");
         if (emit_hist){
             for(int b=0;b<7;b++)  fprintf(fo_site, "\thist_mq_b%d", b);
             for(int b=0;b<7;b++)  fprintf(fo_site, "\thist_eff_b%d", b);
@@ -215,6 +217,8 @@ int analyze_main(int argc, char **argv){
                 const uint32_t *cig=bam_get_cigar(b); int nc=b->core.n_cigar;
                 int64_t rref = b->core.pos; int rpos=0;
                 uint8_t *seq = bam_get_seq(b);
+                uint8_t *qual = bam_get_qual(b);
+                bool rev = (b->core.flag & BAM_FREVERSE) != 0;
                 /* clip fraction once per read (WR attribute) */
                 double cf_read = (double)rq.clipped_bases / (double)b->core.l_qseq;
                 for (int k=0;k<nc;k++){
@@ -229,12 +233,29 @@ int analyze_main(int argc, char **argv){
                                 char rf = refseq[idxs];
                                 int ok = 1;
                                 if (ref_only){
-                                    ok = (rb!='N' && rf!='N' && rb==rf);
+                                    int bq = qual ? qual[rpos + i] : 0;
+                                    ok = (rb!='N' && rf!='N' && rb==rf && bq >= BQ_MIN);
                                 }
                                 if (ok){
                                     match_count[idxs] += 1;
                                     cf_sum[idxs] += cf_read;
                                     cf_cnt[idxs] += 1;
+
+                                    if (ref_only && rp >= bed[iv].start && rp < bed[iv].end){
+                                        int site_idx = (int)(rp - bed[iv].start);
+                                        Site *s_site = &sites[site_idx];
+                                        if (rb == 'A'){
+                                            if (rev) s_site->ref_nA_rev++; else s_site->ref_nA_fwd++;
+                                        } else if (rb == 'C'){
+                                            if (rev) s_site->ref_nC_rev++; else s_site->ref_nC_fwd++;
+                                        } else if (rb == 'G'){
+                                            if (rev) s_site->ref_nG_rev++; else s_site->ref_nG_fwd++;
+                                        } else if (rb == 'T'){
+                                            if (rev) s_site->ref_nT_rev++; else s_site->ref_nT_fwd++;
+                                        } else {
+                                            if (rev) s_site->ref_nN_rev++; else s_site->ref_nN_fwd++;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -421,7 +442,7 @@ int analyze_main(int argc, char **argv){
                         "0\t0\t0",   /* n_flank_cf,  sum_flank_cf,  sumsq_flank_cf */
                         bed[iv].chr, pos1,
                         s->depth, s->mismatches, s->ins_len_sum, s->del_len_sum, s->clip_bases_sum);
-                    for (int k=0;k<10;k++) fputs("\t0", fo_site);
+                    for (int k=0;k<20;k++) fputs("\t0", fo_site);
                     if (emit_hist) {
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t0");
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t0");
@@ -441,6 +462,8 @@ int analyze_main(int argc, char **argv){
                         "%lld\t%.10Lf\t%.10Lf\t"  /* flank_cov */
                         "%lld\t%.10Lf\t%.10Lf\t"  /* flank_cf  */
                         "%lld\t%lld\t%lld\t%lld\t%lld\t"
+                        "%lld\t%lld\t%lld\t%lld\t%lld\t"
+                        "%lld\t%lld\t%lld\t%lld\t%lld\t"
                         "%lld\t%lld\t%lld\t%lld\t%lld",
                         bed[iv].chr, pos1,
                         s->depth, s->mismatches, s->ins_len_sum, s->del_len_sum, s->clip_bases_sum,
@@ -454,7 +477,9 @@ int analyze_main(int argc, char **argv){
                         s->n_flank_cov,  s->sum_flank_cov,  s->sumsq_flank_cov,
                         s->n_flank_cf,   s->sum_flank_cf,   s->sumsq_flank_cf,
                         s->nA_fwd, s->nC_fwd, s->nG_fwd, s->nT_fwd, s->nN_fwd,
-                        s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev, s->nN_rev);
+                        s->nA_rev, s->nC_rev, s->nG_rev, s->nT_rev, s->nN_rev,
+                        s->ref_nA_fwd, s->ref_nC_fwd, s->ref_nG_fwd, s->ref_nT_fwd, s->ref_nN_fwd,
+                        s->ref_nA_rev, s->ref_nC_rev, s->ref_nG_rev, s->ref_nT_rev, s->ref_nN_rev);
                     if (emit_hist) {
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t%d", s->hist_mq[b]);
                         for (int b=0; b<7;  b++) fprintf(fo_site, "\t%d", s->hist_eff[b]);

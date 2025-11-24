@@ -44,6 +44,10 @@ typedef struct {
     long long nA_fwd, nC_fwd, nG_fwd, nT_fwd, nN_fwd;
     long long nA_rev, nC_rev, nG_rev, nT_rev, nN_rev;
 
+    // ref-only matching base counts (per strand)
+    long long ref_nA_fwd, ref_nC_fwd, ref_nG_fwd, ref_nT_fwd, ref_nN_fwd;
+    long long ref_nA_rev, ref_nC_rev, ref_nG_rev, ref_nT_rev, ref_nN_rev;
+
     // hist bins (per-BAM site; filled only when --emit-hist)
     int hist_mq[7];        // MQ [0..60] in bins of 10
     int hist_eff[7];       // effMQ [0..60] in bins of 10
@@ -88,6 +92,10 @@ typedef struct {
     // Phase 2 pooled counts
     long long nA_fwd, nC_fwd, nG_fwd, nT_fwd, nN_fwd;
     long long nA_rev, nC_rev, nG_rev, nT_rev, nN_rev;
+
+    // ref-only matching base counts (per strand)
+    long long ref_nA_fwd, ref_nC_fwd, ref_nG_fwd, ref_nT_fwd, ref_nN_fwd;
+    long long ref_nA_rev, ref_nC_rev, ref_nG_rev, ref_nT_rev, ref_nN_rev;
 
     // pooled hists
     long long hist_mq[7], hist_eff[7], hist_clipfrac[10];
