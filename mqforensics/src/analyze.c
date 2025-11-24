@@ -122,6 +122,9 @@ int analyze_main(int argc, char **argv){
         int L = bed[iv].end - bed[iv].start; if (L<=0) continue;
         Site *sites = (Site*)calloc(L, sizeof(Site)); if(!sites){ perror("calloc"); exit(1); }
 
+        int64_t fetch_start = bed[iv].start;
+        int64_t fetch_end   = bed[iv].end;
+
         /* flanking accumulators (within the BED interval only) */
         long long *match_count = NULL, *cf_cnt = NULL;
         long double *cf_sum = NULL;
@@ -160,6 +163,19 @@ int analyze_main(int argc, char **argv){
             if (b->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) continue;
 
             ReadQC rq; compute_read_qc(b, C, &rq);
+
+            if (ref_only && refseq) {
+                compute_ref_context_read(
+                    b,
+                    refseq,
+                    fetch_start,
+                    fetch_end,
+                    bed[iv].start,
+                    bed[iv].end,
+                    &rq
+                );
+            }
+
             aligned_bp_sum += apply_read_to_interval(
                 b, tid, bed[iv].start, bed[iv].end, &rq, sites
             );
@@ -218,7 +234,6 @@ int analyze_main(int argc, char **argv){
                 int64_t rref = b->core.pos; int rpos=0;
                 uint8_t *seq = bam_get_seq(b);
                 uint8_t *qual = bam_get_qual(b);
-                bool rev = (b->core.flag & BAM_FREVERSE) != 0;
                 /* clip fraction once per read (WR attribute) */
                 double cf_read = (double)rq.clipped_bases / (double)b->core.l_qseq;
                 for (int k=0;k<nc;k++){
@@ -240,22 +255,6 @@ int analyze_main(int argc, char **argv){
                                     match_count[idxs] += 1;
                                     cf_sum[idxs] += cf_read;
                                     cf_cnt[idxs] += 1;
-
-                                    if (ref_only && rp >= bed[iv].start && rp < bed[iv].end){
-                                        int site_idx = (int)(rp - bed[iv].start);
-                                        Site *s_site = &sites[site_idx];
-                                        if (rb == 'A'){
-                                            if (rev) s_site->ref_nA_rev++; else s_site->ref_nA_fwd++;
-                                        } else if (rb == 'C'){
-                                            if (rev) s_site->ref_nC_rev++; else s_site->ref_nC_fwd++;
-                                        } else if (rb == 'G'){
-                                            if (rev) s_site->ref_nG_rev++; else s_site->ref_nG_fwd++;
-                                        } else if (rb == 'T'){
-                                            if (rev) s_site->ref_nT_rev++; else s_site->ref_nT_fwd++;
-                                        } else {
-                                            if (rev) s_site->ref_nN_rev++; else s_site->ref_nN_fwd++;
-                                        }
-                                    }
                                 }
                             }
                         }

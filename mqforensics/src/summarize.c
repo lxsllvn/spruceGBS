@@ -119,10 +119,6 @@ void finalize_and_print_agg(FILE *fo, Agg *a, bool with_hist_metrics){
 
     long long depth_fwd = a->nA_fwd + a->nC_fwd + a->nG_fwd + a->nT_fwd + a->nN_fwd;
     long long depth_rev = a->nA_rev + a->nC_rev + a->nG_rev + a->nT_rev + a->nN_rev;
-    long long nA_tot = a->nA_fwd + a->nA_rev;
-    long long nC_tot = a->nC_fwd + a->nC_rev;
-    long long nG_tot = a->nG_fwd + a->nG_rev;
-    long long nT_tot = a->nT_fwd + a->nT_rev;
 
     long long refA_tot = a->ref_nA_fwd + a->ref_nA_rev;
     long long refC_tot = a->ref_nC_fwd + a->ref_nC_rev;
@@ -136,9 +132,21 @@ void finalize_and_print_agg(FILE *fo, Agg *a, bool with_hist_metrics){
     double alph_ref_f     = isnan(ent_ref_fwd)    ? NAN : pow(2.0, ent_ref_fwd);
     double alph_ref_r     = isnan(ent_ref_rev)    ? NAN : pow(2.0, ent_ref_rev);
 
-    double gc_pooled  = gcfrac_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
-    double gc_fwd     = gcfrac_from_counts(a->nA_fwd, a->nC_fwd, a->nG_fwd, a->nT_fwd);
-    double gc_rev     = gcfrac_from_counts(a->nA_rev, a->nC_rev, a->nG_rev, a->nT_rev);
+    long long ref_gc_pooled_A = refA_tot;
+    long long ref_gc_pooled_C = refC_tot;
+    long long ref_gc_pooled_G = refG_tot;
+    long long ref_gc_pooled_T = refT_tot;
+
+    double gc_pooled =
+        gcfrac_from_counts(ref_gc_pooled_A, ref_gc_pooled_C,
+                           ref_gc_pooled_G, ref_gc_pooled_T);
+    double gc_fwd =
+        gcfrac_from_counts(a->ref_nA_fwd, a->ref_nC_fwd,
+                           a->ref_nG_fwd, a->ref_nT_fwd);
+    double gc_rev =
+        gcfrac_from_counts(a->ref_nA_rev, a->ref_nC_rev,
+                           a->ref_nG_rev, a->ref_nT_rev);
+                           
     double sb_z       = strand_bias_z(depth_fwd, depth_rev);
 
     /* --- print exactly one row --- */

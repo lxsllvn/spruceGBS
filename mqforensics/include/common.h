@@ -66,6 +66,10 @@ typedef struct {
     int cap_mq60;        // cap rescaled to [0..60]
     int eff_mq60;        // min(mapq_raw, cap_mq60)
     long long ins_len, del_len;
+
+    /* whole-read ref-only base counts (within tile/interval) */
+    long long refA_fwd, refC_fwd, refG_fwd, refT_fwd, refN_fwd;
+    long long refA_rev, refC_rev, refG_rev, refT_rev, refN_rev;
 } ReadQC;
 
 // Aggregator for summarize mode (pooled across BAMs)
@@ -132,6 +136,10 @@ static inline char nt16_to_base_uc(int nt16){
 int read_bed(const char *path, BedIv **out);
 void free_bed(BedIv *a, int n);
 void compute_read_qc(const bam1_t *b, int C, ReadQC *out);   // requires <htslib/sam.h>
+void compute_ref_context_read(const bam1_t *b, const char *refseq,
+                              int64_t fetch_start, int64_t fetch_end,
+                              int64_t bed_start, int64_t bed_end,
+                              ReadQC *rq);
 long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int iv_end, const ReadQC *rq, Site *sites);
 void add_local_mismatches(const bam1_t *b, int iv_tid, int iv_start, int iv_end, Site *sites);
 

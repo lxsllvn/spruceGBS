@@ -136,6 +136,74 @@ void compute_read_qc(const bam1_t *b, int C, ReadQC *out){
     out->eff_mq60 = (out->mapq_raw < out->cap_mq60) ? out->mapq_raw : out->cap_mq60;
 }
 
+void compute_ref_context_read(const bam1_t *b,
+                              const char *refseq,
+                              int64_t fetch_start,
+                              int64_t fetch_end,
+                              int64_t bed_start,
+                              int64_t bed_end,
+                              ReadQC *rq)
+{
+    rq->refA_fwd = rq->refC_fwd = rq->refG_fwd = rq->refT_fwd = rq->refN_fwd = 0;
+    rq->refA_rev = rq->refC_rev = rq->refG_rev = rq->refT_rev = rq->refN_rev = 0;
+
+    const uint32_t *cig = bam_get_cigar(b);
+    int nc = b->core.n_cigar;
+    uint8_t *seq  = bam_get_seq(b);
+    uint8_t *qual = bam_get_qual(b);
+    bool rev = (b->core.flag & BAM_FREVERSE) != 0;
+
+    int64_t rref = b->core.pos;
+    int rpos = 0;
+
+    for (int k = 0; k < nc; k++) {
+        int op = bam_cigar_op(cig[k]);
+        int ln = bam_cigar_oplen(cig[k]);
+
+        if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
+            for (int i = 0; i < ln; i++) {
+                int64_t rp = rref + i;
+                if (rp < fetch_start || rp >= fetch_end) continue;
+                if (rp < bed_start   || rp >= bed_end)   continue;
+
+                int z = rpos + i;
+                int nt = bam_seqi(seq, z) & 0xF;
+                char rb = nt16_to_base_uc(nt);
+                char rf = refseq[(int)(rp - fetch_start)];
+                int bq = qual ? qual[z] : 0;
+
+                if (rb == 'N' || rf == 'N' || bq < BQ_MIN) continue;
+                if (rb != rf) continue;
+
+                long long *A_f, *C_f, *G_f, *T_f, *N_f;
+                if (rev) {
+                    A_f = &rq->refA_rev; C_f = &rq->refC_rev; G_f = &rq->refG_rev;
+                    T_f = &rq->refT_rev; N_f = &rq->refN_rev;
+                } else {
+                    A_f = &rq->refA_fwd; C_f = &rq->refC_fwd; G_f = &rq->refG_fwd;
+                    T_f = &rq->refT_fwd; N_f = &rq->refN_fwd;
+                }
+
+                switch (rb) {
+                    case 'A': (*A_f)++; break;
+                    case 'C': (*C_f)++; break;
+                    case 'G': (*G_f)++; break;
+                    case 'T': (*T_f)++; break;
+                    default:  (*N_f)++; break;
+                }
+            }
+            rref += ln;
+            rpos += ln;
+        } else if (op == BAM_CINS) {
+            rpos += ln;
+        } else if (op == BAM_CDEL || op == BAM_CREF_SKIP) {
+            rref += ln;
+        } else if (op == BAM_CSOFT_CLIP) {
+            rpos += ln;
+        }
+    }
+}
+
 // apply read to interval & add local features
 long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int iv_end, const ReadQC *rq, Site *sites){
     const uint32_t *cig=bam_get_cigar(b); int nc=b->core.n_cigar;
@@ -165,6 +233,23 @@ long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int 
                         case 4: if (rev) sites[idx].nG_rev++; else sites[idx].nG_fwd++; break;
                         case 8: if (rev) sites[idx].nT_rev++; else sites[idx].nT_fwd++; break;
                         default: if (rev) sites[idx].nN_rev++; else sites[idx].nN_fwd++; break;
+                    }
+
+                    /* Whole-read ref-only context: add the read's ref* counts to this site */
+                    if (rq->refA_fwd || rq->refC_fwd || rq->refG_fwd || rq->refT_fwd || rq->refN_fwd ||
+                        rq->refA_rev || rq->refC_rev || rq->refG_rev || rq->refT_rev || rq->refN_rev) {
+
+                        sites[idx].ref_nA_fwd += rq->refA_fwd;
+                        sites[idx].ref_nC_fwd += rq->refC_fwd;
+                        sites[idx].ref_nG_fwd += rq->refG_fwd;
+                        sites[idx].ref_nT_fwd += rq->refT_fwd;
+                        sites[idx].ref_nN_fwd += rq->refN_fwd;
+
+                        sites[idx].ref_nA_rev += rq->refA_rev;
+                        sites[idx].ref_nC_rev += rq->refC_rev;
+                        sites[idx].ref_nG_rev += rq->refG_rev;
+                        sites[idx].ref_nT_rev += rq->refT_rev;
+                        sites[idx].ref_nN_rev += rq->refN_rev;
                     }
 
                     // histograms
