@@ -30,8 +30,8 @@ void print_agg_header(FILE *fo, bool with_hist_metrics){
         "frac_capped\tmean_delta\tsd_delta\t"
         "flank_cov_mean\tflank_cov_sd\t"
         "flank_cf_mean\tflank_cf_sd\t"
-        "entropy_pooled\talph_eff_pooled\tentropy_fwd\talph_eff_fwd\t"
-        "entropy_rev\talph_eff_rev\t"
+        "entropy_ref_pooled\talph_eff_ref_pooled\tentropy_ref_fwd\talph_eff_ref_fwd\t"
+        "entropy_ref_rev\talph_eff_ref_rev\t"
         "gc_frac_pooled\tgc_frac_fwd\tgc_frac_rev\t"
         "strand_bias_z");
     if (with_hist_metrics){
@@ -119,19 +119,34 @@ void finalize_and_print_agg(FILE *fo, Agg *a, bool with_hist_metrics){
 
     long long depth_fwd = a->nA_fwd + a->nC_fwd + a->nG_fwd + a->nT_fwd + a->nN_fwd;
     long long depth_rev = a->nA_rev + a->nC_rev + a->nG_rev + a->nT_rev + a->nN_rev;
-    long long nA_tot = a->nA_fwd + a->nA_rev;
-    long long nC_tot = a->nC_fwd + a->nC_rev;
-    long long nG_tot = a->nG_fwd + a->nG_rev;
-    long long nT_tot = a->nT_fwd + a->nT_rev;
-    double ent_pooled = entropy_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
-    double ent_fwd    = entropy_from_counts(a->nA_fwd, a->nC_fwd, a->nG_fwd, a->nT_fwd);
-    double ent_rev    = entropy_from_counts(a->nA_rev, a->nC_rev, a->nG_rev, a->nT_rev);
-    double alph_p     = isnan(ent_pooled) ? NAN : pow(2.0, ent_pooled);
-    double alph_f     = isnan(ent_fwd)    ? NAN : pow(2.0, ent_fwd);
-    double alph_r     = isnan(ent_rev)    ? NAN : pow(2.0, ent_rev);
-    double gc_pooled  = gcfrac_from_counts(nA_tot, nC_tot, nG_tot, nT_tot);
-    double gc_fwd     = gcfrac_from_counts(a->nA_fwd, a->nC_fwd, a->nG_fwd, a->nT_fwd);
-    double gc_rev     = gcfrac_from_counts(a->nA_rev, a->nC_rev, a->nG_rev, a->nT_rev);
+
+    long long refA_tot = a->ref_nA_fwd + a->ref_nA_rev;
+    long long refC_tot = a->ref_nC_fwd + a->ref_nC_rev;
+    long long refG_tot = a->ref_nG_fwd + a->ref_nG_rev;
+    long long refT_tot = a->ref_nT_fwd + a->ref_nT_rev;
+
+    double ent_ref_pooled = entropy_from_counts(refA_tot, refC_tot, refG_tot, refT_tot);
+    double ent_ref_fwd    = entropy_from_counts(a->ref_nA_fwd, a->ref_nC_fwd, a->ref_nG_fwd, a->ref_nT_fwd);
+    double ent_ref_rev    = entropy_from_counts(a->ref_nA_rev, a->ref_nC_rev, a->ref_nG_rev, a->ref_nT_rev);
+    double alph_ref_p     = isnan(ent_ref_pooled) ? NAN : pow(2.0, ent_ref_pooled);
+    double alph_ref_f     = isnan(ent_ref_fwd)    ? NAN : pow(2.0, ent_ref_fwd);
+    double alph_ref_r     = isnan(ent_ref_rev)    ? NAN : pow(2.0, ent_ref_rev);
+
+    long long ref_gc_pooled_A = refA_tot;
+    long long ref_gc_pooled_C = refC_tot;
+    long long ref_gc_pooled_G = refG_tot;
+    long long ref_gc_pooled_T = refT_tot;
+
+    double gc_pooled =
+        gcfrac_from_counts(ref_gc_pooled_A, ref_gc_pooled_C,
+                           ref_gc_pooled_G, ref_gc_pooled_T);
+    double gc_fwd =
+        gcfrac_from_counts(a->ref_nA_fwd, a->ref_nC_fwd,
+                           a->ref_nG_fwd, a->ref_nT_fwd);
+    double gc_rev =
+        gcfrac_from_counts(a->ref_nA_rev, a->ref_nC_rev,
+                           a->ref_nG_rev, a->ref_nT_rev);
+                           
     double sb_z       = strand_bias_z(depth_fwd, depth_rev);
 
     /* --- print exactly one row --- */
@@ -157,7 +172,7 @@ void finalize_and_print_agg(FILE *fo, Agg *a, bool with_hist_metrics){
         frac_capped, mean_delta, sd_delta,
         flank_cov_mean, flank_cov_sd,
         flank_cf_mean,  flank_cf_sd,
-        ent_pooled, alph_p, ent_fwd, alph_f, ent_rev, alph_r,
+        ent_ref_pooled, alph_ref_p, ent_ref_fwd, alph_ref_f, ent_ref_rev, alph_ref_r,
         gc_pooled, gc_fwd, gc_rev,
         sb_z
     );
@@ -299,6 +314,11 @@ int summarize_main(int argc, char **argv){
         long long *cnt_ptr[10] = { &cur.nA_fwd, &cur.nC_fwd, &cur.nG_fwd, &cur.nT_fwd, &cur.nN_fwd,
                                    &cur.nA_rev, &cur.nC_rev, &cur.nG_rev, &cur.nT_rev, &cur.nN_rev };
         for (int cc=0; cc<10; cc++){ tok = strsep(&p,"\t"); if(!tok) goto parse_error; *(cnt_ptr[cc]) += atoll(tok); }
+
+        // ref-only per-strand base counts (10 numbers)
+        long long *ref_cnt_ptr[10] = { &cur.ref_nA_fwd, &cur.ref_nC_fwd, &cur.ref_nG_fwd, &cur.ref_nT_fwd, &cur.ref_nN_fwd,
+                                       &cur.ref_nA_rev, &cur.ref_nC_rev, &cur.ref_nG_rev, &cur.ref_nT_rev, &cur.ref_nN_rev };
+        for (int cc=0; cc<10; cc++){ tok = strsep(&p,"\t"); if(!tok) goto parse_error; *(ref_cnt_ptr[cc]) += atoll(tok); }
 
         // optional hists
         if (with_hist){

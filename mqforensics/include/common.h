@@ -44,6 +44,10 @@ typedef struct {
     long long nA_fwd, nC_fwd, nG_fwd, nT_fwd, nN_fwd;
     long long nA_rev, nC_rev, nG_rev, nT_rev, nN_rev;
 
+    // ref-only matching base counts (per strand)
+    long long ref_nA_fwd, ref_nC_fwd, ref_nG_fwd, ref_nT_fwd, ref_nN_fwd;
+    long long ref_nA_rev, ref_nC_rev, ref_nG_rev, ref_nT_rev, ref_nN_rev;
+
     // hist bins (per-BAM site; filled only when --emit-hist)
     int hist_mq[7];        // MQ [0..60] in bins of 10
     int hist_eff[7];       // effMQ [0..60] in bins of 10
@@ -62,6 +66,10 @@ typedef struct {
     int cap_mq60;        // cap rescaled to [0..60]
     int eff_mq60;        // min(mapq_raw, cap_mq60)
     long long ins_len, del_len;
+
+    /* whole-read ref-only base counts (within tile/interval) */
+    long long refA_fwd, refC_fwd, refG_fwd, refT_fwd, refN_fwd;
+    long long refA_rev, refC_rev, refG_rev, refT_rev, refN_rev;
 } ReadQC;
 
 // Aggregator for summarize mode (pooled across BAMs)
@@ -88,6 +96,10 @@ typedef struct {
     // Phase 2 pooled counts
     long long nA_fwd, nC_fwd, nG_fwd, nT_fwd, nN_fwd;
     long long nA_rev, nC_rev, nG_rev, nT_rev, nN_rev;
+
+    // ref-only matching base counts (per strand)
+    long long ref_nA_fwd, ref_nC_fwd, ref_nG_fwd, ref_nT_fwd, ref_nN_fwd;
+    long long ref_nA_rev, ref_nC_rev, ref_nG_rev, ref_nT_rev, ref_nN_rev;
 
     // pooled hists
     long long hist_mq[7], hist_eff[7], hist_clipfrac[10];
@@ -124,9 +136,12 @@ static inline char nt16_to_base_uc(int nt16){
 int read_bed(const char *path, BedIv **out);
 void free_bed(BedIv *a, int n);
 void compute_read_qc(const bam1_t *b, int C, ReadQC *out);   // requires <htslib/sam.h>
-long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int iv_end, const ReadQC *rq, Site *sites, int emit_suff, int emit_hist);
+void compute_ref_context_read(const bam1_t *b, const char *refseq,
+                              int64_t fetch_start, int64_t fetch_end,
+                              int64_t bed_start, int64_t bed_end,
+                              ReadQC *rq);
+long long apply_read_to_interval(const bam1_t *b, int iv_tid, int iv_start, int iv_end, const ReadQC *rq, Site *sites);
 void add_local_mismatches(const bam1_t *b, int iv_tid, int iv_start, int iv_end, Site *sites);
-void mqf_set_cap(uint16_t *seen_arr, int len, int cap, long long tile_start);
 
 // analyze.c
 int analyze_main(int argc, char **argv);
